@@ -39,6 +39,7 @@ show-console -hide
 #Script path locations for loading
     #Scriptname = {filename+path/command}
     $WindowsInstallCleanup = {.\Scripts\Windows10InstallCleaner.ps1}
+    $WindowsUninstallOneDrive = {.\Scripts\Uninstallonedrive.ps1}
     $WindowsDiskCleanup = {cleanmgr /tuneup:1}
     $Usercleanup = {.\Scripts\UserCleaner.ps1}
     $Defrag = {.\Scripts\windowsdefrag.ps1}
@@ -47,6 +48,7 @@ show-console -hide
     $DISMRestore = {DISM /Online /Cleanup-Image /ScanHealth | DISM /Online /cleanup-Image /Restorehealth}
     $SFCRepair = {sfc /scannow}
     $WindowsTroubleshooting = {.\Scripts\Troubleshooting.ps1}
+    $CustomChanges = {.\Scripts\CustomChanges.ps1}
 
 #Form GUI for loading
  #Create Form to show selection of cleanup
@@ -76,9 +78,16 @@ show-console -hide
     $ReinstallDefaultAppsbutton.Text = "Reinstall Default Apps"
     $ReinstallDefaultAppsbutton.Add_Click($ReinstallApps)
 
+#Uninstall OneDrive
+    $OneDriveUninstallbutton = New-Object System.Windows.Forms.Button
+    $OneDriveUninstallbutton.Location = New-Object System.Drawing.Size(35,65)
+    $OneDriveUninstallbutton.Size = New-Object System.Drawing.Size(120,23)
+    $OneDriveUninstallbutton.Text = "Uninstall OneDrive"
+    $OneDriveUninstallbutton.Add_Click($WindowsUninstallOneDrive)
+
 #Disk Cleanup Utility Button
     $Diskcleanupbutton = New-Object System.Windows.Forms.Button
-    $Diskcleanupbutton.Location = New-Object System.Drawing.Size(35,65)
+    $Diskcleanupbutton.Location = New-Object System.Drawing.Size(35,95)
     $Diskcleanupbutton.Size = New-Object System.Drawing.Size(120,23)
     $Diskcleanupbutton.Text = "Disk Cleanup Silent"
     $Diskcleanupbutton.Add_Click($WindowsDiskCleanup)
@@ -92,7 +101,7 @@ show-console -hide
 
 #User Cleanup Utility
     $usercleanupbutton = New-Object System.Windows.Forms.Button
-    $usercleanupbutton.Location = New-Object System.Drawing.Size(35,95)
+    $usercleanupbutton.Location = New-Object System.Drawing.Size(35,125)
     $usercleanupbutton.Size = New-Object System.Drawing.Size(120,23)
     $usercleanupbutton.Text = "User Cleanup"
     $usercleanupbutton.Add_Click($Usercleanup)
@@ -106,7 +115,7 @@ show-console -hide
 
 #Defragmentation Utility
     $Defragbutton = New-Object System.Windows.Forms.Button
-    $Defragbutton.Location = New-Object System.Drawing.Size(35,125)
+    $Defragbutton.Location = New-Object System.Drawing.Size(35,155)
     $Defragbutton.Size = New-Object System.Drawing.Size(120,23)
     $Defragbutton.Text = "Defrag"
     $Defragbutton.Add_Click($Defrag)
@@ -120,10 +129,17 @@ show-console -hide
 
 #Troubleshooting Issues
     $Troubleshootbutton = New-Object System.Windows.Forms.Button
-    $Troubleshootbutton.Location = New-Object System.Drawing.Size(35,155)
+    $Troubleshootbutton.Location = New-Object System.Drawing.Size(35,185)
     $Troubleshootbutton.Size = New-Object System.Drawing.Size(120,23)
     $Troubleshootbutton.Text = "Troubleshooting"
     $Troubleshootbutton.Add_Click($WindowsTroubleshooting)
+
+#Troubleshooting Issues
+    $Customchangesbutton = New-Object System.Windows.Forms.Button
+    $Customchangesbutton.Location = New-Object System.Drawing.Size(165,155)
+    $Customchangesbutton.Size = New-Object System.Drawing.Size(130,23)
+    $Customchangesbutton.Text = "Custom Changes"
+    $Customchangesbutton.Add_Click($CustomChanges)
 
 #Exit Button
     $exitButton = New-Object System.Windows.Forms.Button
@@ -137,6 +153,7 @@ show-console -hide
 #Add buttons
     $Form.Controls.Add($FormText)
     $Form.Controls.Add($Cleanupinstallbutton)
+    $Form.Controls.Add($OneDriveUninstallbutton)
     $Form.Controls.Add($ReinstallDefaultAppsbutton)
     $Form.Controls.Add($Diskcleanupbutton)
     $Form.Controls.Add($Delprofbutton)
@@ -145,6 +162,7 @@ show-console -hide
     $Form.Controls.Add($Defragbutton)
     $Form.Controls.Add($SFCRepairbutton)
     $Form.Controls.Add($Troubleshootbutton)
+    $Form.Controls.Add($Customchangesbutton)
 
 #Null command to stop console spam
     $Form.ShowDialog() > $null
