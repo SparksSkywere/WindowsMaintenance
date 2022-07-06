@@ -63,31 +63,30 @@ $MaxpathRegpath =  . $PSScriptRoot\MaxPathReg.ps1
  $FormText.Location = New-Object System.Drawing.Point(35,10)
  $FormText.Size = New-Object System.Drawing.Size(300,18)
  $FormText.Text = 'Troubleshooting runs in silent mode'
- 
+#Internet Fix
  $TroubleInternetbutton = New-Object System.Windows.Forms.Button
  $TroubleInternetbutton.Location = New-Object System.Drawing.Size(35,35)
  $TroubleInternetbutton.Size = New-Object System.Drawing.Size(120,23)
  $TroubleInternetbutton.Text = "Internet Connection"
  $TroubleInternetbutton.Add_Click($TroubleInternet)
-
+#Windows Update
  $TroubleWindowsUpdatesbutton = New-Object System.Windows.Forms.Button
  $TroubleWindowsUpdatesbutton.Location = New-Object System.Drawing.Size(165,35)
  $TroubleWindowsUpdatesbutton.Size = New-Object System.Drawing.Size(120,23)
  $TroubleWindowsUpdatesbutton.Text = "Windows Updates"
  $TroubleWindowsUpdatesbutton.Add_Click($TroubleWindowsUpdates)
-
+#Microsoft Store
  $TroubleStorebutton = New-Object System.Windows.Forms.Button
  $TroubleStorebutton.Location = New-Object System.Drawing.Size(35,65)
  $TroubleStorebutton.Size = New-Object System.Drawing.Size(120,23)
  $TroubleStorebutton.Text = "Microsoft Store"
  $TroubleStorebutton.Add_Click($TroubleStore)
-
+#Max Path registry edit
  $Maxpathregbutton = New-Object System.Windows.Forms.Button
  $Maxpathregbutton.Location = New-Object System.Drawing.Size(165,65)
  $Maxpathregbutton.Size = New-Object System.Drawing.Size(120,23)
  $Maxpathregbutton.Text = "Max_Path Regedit"
  $Maxpathregbutton.Add_Click($Maxpathreg)
-
 #Exit Button
  $exitButton = New-Object System.Windows.Forms.Button
  $exitButton.Location = New-Object System.Drawing.Point(135,270)
@@ -96,14 +95,12 @@ $MaxpathRegpath =  . $PSScriptRoot\MaxPathReg.ps1
  $exitButton.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
  $form.CancelButton = $exitButton
  $form.Controls.Add($exitButton)
-
 #Add buttons
  $Form.Controls.Add($FormText)
  $Form.Controls.Add($TroubleInternetbutton)
  $Form.Controls.Add($TroubleWindowsUpdatesButton)
  $Form.Controls.Add($TroubleStorebutton)
  $Form.Controls.Add($Maxpathregbutton)
-
 #Null command to stop console spam
  $Form.ShowDialog() > $null
 

@@ -43,12 +43,13 @@ show-console -hide
     $WindowsDiskCleanup = {cleanmgr /tuneup:1}
     $Usercleanup = {.\Scripts\UserCleaner.ps1}
     $Defrag = {.\Scripts\windowsdefrag.ps1}
+    $DiskCheck = {.\Scripts\windowsrepairvolume.ps1}
     $ReinstallApps = {Get-AppXPackage -AllUsers | ForEach-Object {Add-AppxPackage -DisableDevelopmentMode -Register "$($_.InstallLocation)\AppXManifest.xml"}}
     $DelProf = {.\Scripts\Delprof.exe /u /q}
     $DISMRestore = {DISM /Online /Cleanup-Image /ScanHealth | DISM /Online /cleanup-Image /Restorehealth}
     $SFCRepair = {sfc /scannow}
     $WindowsTroubleshooting = {.\Scripts\Troubleshooting.ps1}
-    $CustomChanges = {.\Scripts\CustomChanges.ps1}
+    #$CustomChanges = {.\Scripts\CustomChanges.ps1}
 
 #Form GUI for loading
  #Create Form to show selection of cleanup
@@ -63,84 +64,78 @@ show-console -hide
     $FormText.Location = New-Object System.Drawing.Point(35,10)
     $FormText.Size = New-Object System.Drawing.Size(300,18)
     $FormText.Text = 'Select Options Below, these do run in silent mode'
-    
 #Cleanup Install button
     $Cleanupinstallbutton = New-Object System.Windows.Forms.Button
     $Cleanupinstallbutton.Location = New-Object System.Drawing.Size(35,35)
     $Cleanupinstallbutton.Size = New-Object System.Drawing.Size(120,23)
     $Cleanupinstallbutton.Text = "Fresh Install Cleanup"
     $Cleanupinstallbutton.Add_Click($WindowsInstallCleanup)
-
 #Re-Install Default Apps button
     $ReinstallDefaultAppsbutton = New-Object System.Windows.Forms.Button
     $ReinstallDefaultAppsbutton.Location = New-Object System.Drawing.Size(165,35)
     $ReinstallDefaultAppsbutton.Size = New-Object System.Drawing.Size(130,23)
     $ReinstallDefaultAppsbutton.Text = "Reinstall Default Apps"
     $ReinstallDefaultAppsbutton.Add_Click($ReinstallApps)
-
 #Uninstall OneDrive
     $OneDriveUninstallbutton = New-Object System.Windows.Forms.Button
     $OneDriveUninstallbutton.Location = New-Object System.Drawing.Size(35,65)
     $OneDriveUninstallbutton.Size = New-Object System.Drawing.Size(120,23)
     $OneDriveUninstallbutton.Text = "Uninstall OneDrive"
     $OneDriveUninstallbutton.Add_Click($WindowsUninstallOneDrive)
-
 #Disk Cleanup Utility Button
     $Diskcleanupbutton = New-Object System.Windows.Forms.Button
     $Diskcleanupbutton.Location = New-Object System.Drawing.Size(35,95)
     $Diskcleanupbutton.Size = New-Object System.Drawing.Size(120,23)
     $Diskcleanupbutton.Text = "Disk Cleanup Silent"
     $Diskcleanupbutton.Add_Click($WindowsDiskCleanup)
-
 #Delprof Cleanup Button
     $Delprofbutton = New-Object System.Windows.Forms.Button
     $Delprofbutton.Location = New-Object System.Drawing.Size(165,65)
     $Delprofbutton.Size = New-Object System.Drawing.Size(130,23)
     $Delprofbutton.Text = "Delete All user profiles"
     $Delprofbutton.Add_Click($DelProf)
-
 #User Cleanup Utility
     $usercleanupbutton = New-Object System.Windows.Forms.Button
     $usercleanupbutton.Location = New-Object System.Drawing.Size(35,125)
     $usercleanupbutton.Size = New-Object System.Drawing.Size(120,23)
     $usercleanupbutton.Text = "User Cleanup"
     $usercleanupbutton.Add_Click($Usercleanup)
-
-#User Cleanup Utility
+#DISM Restore
     $Restorehealthbutton = New-Object System.Windows.Forms.Button
     $Restorehealthbutton.Location = New-Object System.Drawing.Size(165,95)
     $Restorehealthbutton.Size = New-Object System.Drawing.Size(130,23)
     $Restorehealthbutton.Text = "DISM Restore Health"
     $Restorehealthbutton.Add_Click($DISMRestore)
-
 #Defragmentation Utility
     $Defragbutton = New-Object System.Windows.Forms.Button
     $Defragbutton.Location = New-Object System.Drawing.Size(35,155)
     $Defragbutton.Size = New-Object System.Drawing.Size(120,23)
     $Defragbutton.Text = "Defrag"
     $Defragbutton.Add_Click($Defrag)
-
-#Defragmentation Utility
+#Disk Check Utility
+    $DiskCheckbutton = New-Object System.Windows.Forms.Button
+    $DiskCheckbutton.Location = New-Object System.Drawing.Size(165,155)
+    $DiskCheckbutton.Size = New-Object System.Drawing.Size(130,23)
+    $DiskCheckbutton.Text = "Disk Check"
+    $DiskCheckbutton.Add_Click($DiskCheck)
+#System Repair Utility
     $SFCRepairbutton = New-Object System.Windows.Forms.Button
     $SFCRepairbutton.Location = New-Object System.Drawing.Size(165,125)
     $SFCRepairbutton.Size = New-Object System.Drawing.Size(130,23)
     $SFCRepairbutton.Text = "System Repair Scan"
     $SFCRepairbutton.Add_Click($SFCRepair)
-
 #Troubleshooting Issues
     $Troubleshootbutton = New-Object System.Windows.Forms.Button
     $Troubleshootbutton.Location = New-Object System.Drawing.Size(35,185)
     $Troubleshootbutton.Size = New-Object System.Drawing.Size(120,23)
     $Troubleshootbutton.Text = "Troubleshooting"
     $Troubleshootbutton.Add_Click($WindowsTroubleshooting)
-
-#Troubleshooting Issues
-    $Customchangesbutton = New-Object System.Windows.Forms.Button
-    $Customchangesbutton.Location = New-Object System.Drawing.Size(165,155)
-    $Customchangesbutton.Size = New-Object System.Drawing.Size(130,23)
-    $Customchangesbutton.Text = "Custom Changes"
-    $Customchangesbutton.Add_Click($CustomChanges)
-
+#Custom Changes
+    #$Customchangesbutton = New-Object System.Windows.Forms.Button
+    #$Customchangesbutton.Location = New-Object System.Drawing.Size(165,155)
+    #$Customchangesbutton.Size = New-Object System.Drawing.Size(130,23)
+    #$Customchangesbutton.Text = "Custom Changes"
+    #$Customchangesbutton.Add_Click($CustomChanges)
 #Exit Button
     $exitButton = New-Object System.Windows.Forms.Button
     $exitButton.Location = New-Object System.Drawing.Point(135,270)
@@ -149,7 +144,6 @@ show-console -hide
     $exitButton.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
     $form.CancelButton = $exitButton
     $form.Controls.Add($exitButton)
-
 #Add buttons
     $Form.Controls.Add($FormText)
     $Form.Controls.Add($Cleanupinstallbutton)
@@ -160,10 +154,10 @@ show-console -hide
     $Form.Controls.Add($usercleanupbutton)
     $Form.Controls.Add($Restorehealthbutton)
     $Form.Controls.Add($Defragbutton)
+    $Form.Controls.Add($DiskCheckbutton)
     $Form.Controls.Add($SFCRepairbutton)
     $Form.Controls.Add($Troubleshootbutton)
-    $Form.Controls.Add($Customchangesbutton)
-
+    #$Form.Controls.Add($Customchangesbutton)
 #Null command to stop console spam
     $Form.ShowDialog() > $null
 

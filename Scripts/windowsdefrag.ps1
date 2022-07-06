@@ -34,32 +34,32 @@ function Show-Console
 show-console -hide
 
 #Drive Letters + Defrag command
-$A = {Optimize-Volume A -Defrag}
-$B = {Optimize-Volume B -Defrag}
-$C = {Optimize-Volume C -Defrag}
-$D = {Optimize-Volume D -Defrag}
-$E = {Optimize-Volume E -Defrag}
-$F = {Optimize-Volume F -Defrag}
-$G = {Optimize-Volume G -Defrag}
-$H = {Optimize-Volume H -Defrag}
-$I = {Optimize-Volume I -Defrag}
-$J = {Optimize-Volume J -Defrag}
-$K = {Optimize-Volume K -Defrag}
-$L = {Optimize-Volume L -Defrag}
-$M = {Optimize-Volume M -Defrag}
-$N = {Optimize-Volume N -Defrag}
-$O = {Optimize-Volume O -Defrag}
-$P = {Optimize-Volume P -Defrag}
-$Q = {Optimize-Volume Q -Defrag}
-$R = {Optimize-Volume R -Defrag}
-$S = {Optimize-Volume S -Defrag}
-$T = {Optimize-Volume T -Defrag}
-$U = {Optimize-Volume U -Defrag}
-$V = {Optimize-Volume V -Defrag}
-$W = {Optimize-Volume W -Defrag}
-$X = {Optimize-Volume X -Defrag}
-$Y = {Optimize-Volume Y -Defrag}
-$Z = {Optimize-Volume Z -Defrag}
+$A = {Optimize-Volume -DriveLetter A -Defrag}
+$B = {Optimize-Volume -DriveLetter B -Defrag}
+$C = {Optimize-Volume -DriveLetter C -Defrag}
+$D = {Optimize-Volume -DriveLetter D -Defrag}
+$E = {Optimize-Volume -DriveLetter E -Defrag}
+$F = {Optimize-Volume -DriveLetter F -Defrag}
+$G = {Optimize-Volume -DriveLetter G -Defrag}
+$H = {Optimize-Volume -DriveLetter H -Defrag}
+$I = {Optimize-Volume -DriveLetter I -Defrag}
+$J = {Optimize-Volume -DriveLetter J -Defrag}
+$K = {Optimize-Volume -DriveLetter K -Defrag}
+$L = {Optimize-Volume -DriveLetter L -Defrag}
+$M = {Optimize-Volume -DriveLetter M -Defrag}
+$N = {Optimize-Volume -DriveLetter N -Defrag}
+$O = {Optimize-Volume -DriveLetter O -Defrag}
+$P = {Optimize-Volume -DriveLetter P -Defrag}
+$Q = {Optimize-Volume -DriveLetter Q -Defrag}
+$R = {Optimize-Volume -DriveLetter R -Defrag}
+$S = {Optimize-Volume -DriveLetter S -Defrag}
+$T = {Optimize-Volume -DriveLetter T -Defrag}
+$U = {Optimize-Volume -DriveLetter U -Defrag}
+$V = {Optimize-Volume -DriveLetter V -Defrag}
+$W = {Optimize-Volume -DriveLetter W -Defrag}
+$X = {Optimize-Volume -DriveLetter X -Defrag}
+$Y = {Optimize-Volume -DriveLetter Y -Defrag}
+$Z = {Optimize-Volume -DriveLetter Z -Defrag}
 
 #Create form containing all the buttons to the commands set above
 [System.Windows.MessageBox]::Show('When you select a drive the defrag will run in the background, check task manager for disk usage','Windows Quick Defrag','Ok','Warning') | Out-Null

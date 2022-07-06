@@ -38,7 +38,9 @@ show-console -hide
 
 #Commands for the buttons
     #$Commandname = {Command}
-    $DisableTelementary = {}
+    $TroubleInternetbutton = {}
+    $TroubleWindowsUpdatesbutton = {}
+    $TroubleStorebutton = {}
 
 #Troubleshooting form
  $Form = New-Object System.Windows.Forms.Form
