@@ -2,9 +2,9 @@
 
 This is a set of scripts I have made or utilities downloaded (credit below), these scripts can only be ran one after another, so be patient while one script runs after another.
 
-You may also take the scripts and use them in your own programs under the GNU License agreement and credit is given to me.
+You may also take the scripts and use them in your own programs under the GNU License agreement and credit is given to me, these scripts take time to write, test and improve, I am not the best coder in the world but I try to make useful programs!
 
-# From Readme.txt
+# Readme.txt
 
 Quick Readme for the exe file not loading
 Make sure you are running administrator on the exe or .ps1 script
@@ -23,6 +23,8 @@ Maintenance
 6. User Cleanup Utility
 7. DISM Restore Health
 8. Defragmentation Utility
+9. Windows System Scan and repair
+10. Check Disk (Volume Repair)
 
 TroubleShooting
 
