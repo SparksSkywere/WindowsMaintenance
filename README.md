@@ -25,14 +25,15 @@ Maintenance
 8. Defragmentation Utility
 9. Windows System Scan and repair
 10. Check Disk (Volume Repair)
-11. (Future Addition) System Optimisation
+11. (Currently Developing) System Optimisation
 
 TroubleShooting
 
 1. Internet Fix
 2. Windows Update
 3. Microsoft Store
-4. Max Path registry fix
+4. Max Path length registry increase
+5. Windows Update Error 0x800f0922 Fix
 
 # Extra Documentation
 
