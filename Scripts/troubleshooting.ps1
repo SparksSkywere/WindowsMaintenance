@@ -35,20 +35,29 @@ function Show-Console
 }
 #end of powershell console hiding
 #To show the console change "-hide" to "-show"
-show-console -hide
+show-console -show
+
+#Functions
+function RestartNeeded () {
+    [System.Windows.MessageBox]::Show('Please restart the computer','Windows Troubleshooting','Ok','Information')
+}
+
+function ExecutionCompleted () {
+    [System.Windows.MessageBox]::Show('Operation Completed','Windows Troubleshooting','Ok','Information')
+}
 
 #$scriptPath = split-path -parent $MyInvocation.MyCommand.Definition
-$MaxpathRegpath =  . $PSScriptRoot\MaxPathReg.ps1
 
 #Commands for the buttons
     #$Commandname = {Command}
-    $TroubleInternet = {netsh advfirewall reset | netsh int ip reset | netsh int ipv6 reset | netsh winsock reset | IPconfig /flushdns | IPconfig /release | IPConfig /Renew}
-    $TroubleWindowsUpdates = {net stop bits | net stop wuauserv | net stop appidsvc | net stop cryptsvc | Get-ChildItem -Path '%systemroot%\SoftwareDistribution' * -Recurse | Remove-Item | Get-ChildItem -Path '%systemroot%\system32\catroot2' * -Recurse | Remove-Item | regsvr32.exe /s atl.dll | regsvr32.exe /s urlmon.dll | regsvr32.exe /s mshtml.dll | regsvr32.exe /s shdocvw.dll | regsvr32.exe /s browseui.dll | regsvr32.exe /s jscript.dll | regsvr32.exe /s vbscript.dll | regsvr32.exe /s scrrun.dll | regsvr32.exe /s msxml.dll | regsvr32.exe /s msxml3.dll | regsvr32.exe /s msxml6.dll | regsvr32.exe /s actxprxy.dll | regsvr32.exe /s softpub.dll | regsvr32.exe /s wintrust.dll | regsvr32.exe /s dssenh.dll | regsvr32.exe /s rsaenh.dll | regsvr32.exe /s gpkcsp.dll | regsvr32.exe /s sccbase.dll | regsvr32.exe /s slbcsp.dll | regsvr32.exe /s cryptdlg.dll | regsvr32.exe /s oleaut32.dll | regsvr32.exe /s ole32.dll | regsvr32.exe /s shell32.dll | regsvr32.exe /s initpki.dll | regsvr32.exe /s wuapi.dll | regsvr32.exe /s wuaueng.dll | regsvr32.exe /s wuaueng1.dll | regsvr32.exe /s wucltui.dll | regsvr32.exe /s wups.dll | regsvr32.exe /s wups2.dll | regsvr32.exe /s wuweb.dll | regsvr32.exe /s qmgr.dll | regsvr32.exe /s qmgrprxy.dll | regsvr32.exe /s wucltux.dll | regsvr32.exe /s muweb.dll | regsvr32.exe /s wuwebv.dll | netsh winsock reset | netsh winsock reset proxy | net start bits | net start wuauserv | net start appidsvc | net start cryptsvc}
+    $TroubleInternet = {netsh advfirewall reset | netsh int ip reset | netsh int ipv6 reset | netsh winsock reset | IPconfig /flushdns | IPconfig /release | IPConfig /Renew | ExecutionCompleted}
+    $TroubleWindowsUpdates = {net stop bits | net stop wuauserv | net stop appidsvc | net stop cryptsvc | Get-ChildItem -Path '%systemroot%\SoftwareDistribution' * -Recurse | Remove-Item | Get-ChildItem -Path '%systemroot%\system32\catroot2' * -Recurse | Remove-Item | regsvr32.exe /s atl.dll | regsvr32.exe /s urlmon.dll | regsvr32.exe /s mshtml.dll | regsvr32.exe /s shdocvw.dll | regsvr32.exe /s browseui.dll | regsvr32.exe /s jscript.dll | regsvr32.exe /s vbscript.dll | regsvr32.exe /s scrrun.dll | regsvr32.exe /s msxml.dll | regsvr32.exe /s msxml3.dll | regsvr32.exe /s msxml6.dll | regsvr32.exe /s actxprxy.dll | regsvr32.exe /s softpub.dll | regsvr32.exe /s wintrust.dll | regsvr32.exe /s dssenh.dll | regsvr32.exe /s rsaenh.dll | regsvr32.exe /s gpkcsp.dll | regsvr32.exe /s sccbase.dll | regsvr32.exe /s slbcsp.dll | regsvr32.exe /s cryptdlg.dll | regsvr32.exe /s oleaut32.dll | regsvr32.exe /s ole32.dll | regsvr32.exe /s shell32.dll | regsvr32.exe /s initpki.dll | regsvr32.exe /s wuapi.dll | regsvr32.exe /s wuaueng.dll | regsvr32.exe /s wuaueng1.dll | regsvr32.exe /s wucltui.dll | regsvr32.exe /s wups.dll | regsvr32.exe /s wups2.dll | regsvr32.exe /s wuweb.dll | regsvr32.exe /s qmgr.dll | regsvr32.exe /s qmgrprxy.dll | regsvr32.exe /s wucltux.dll | regsvr32.exe /s muweb.dll | regsvr32.exe /s wuwebv.dll | netsh winsock reset | netsh winsock reset proxy | net start bits | net start wuauserv | net start appidsvc | net start cryptsvc | wuauclt /resetauthorization /detectnow | ExecutionCompleted}
     $TroubleStore = {WSReset.exe}
-    $Maxpathreg = {Start-Process -FilePath $MaxpathRegpath -Verb Runas -ArgumentList '-command "Get-Service"'}
-    #$TroubleWindowsUpdates = {$Writeverify  $RestartNeeded}
+    $Maxpathreg = {Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\FileSystem' -Name 'LongPathsEnabled' -value 1 | ExecutionCompleted}
+    $Updateerror0x800f0922fix = {lodctr /R | winmgmt.exe /RESYNCPERF | sc config trustedinstaller start= auto | net start trustedinstaller | Dism /Online /Cleanup-Image /RestoreHealth | ExecutionCompleted}
+    #$HardwareDeviceTroubleshooter = {msdt.exe -id DeviceDiagnostic}
+    #DISM /imageC:\ /Cleanup-Image /RestoreHealth /Source:C:\Windows10\Sources\install.esd /Scratchdir:C:\Scratch
 
-    #$RestartNeeded = {[System.Windows.MessageBox]::Show('Please restart the computer.','Windows Maintenance','Ok','Information')}
     #$Writeverify = {.\Write-Outputverify.ps1}
 
 #Troubleshooting form
@@ -87,6 +96,12 @@ $MaxpathRegpath =  . $PSScriptRoot\MaxPathReg.ps1
  $Maxpathregbutton.Size = New-Object System.Drawing.Size(120,23)
  $Maxpathregbutton.Text = "Max_Path Regedit"
  $Maxpathregbutton.Add_Click($Maxpathreg)
+#Windows Update Error 0x800f0922 Fix
+ $Updateerror0x800f0922fixbutton = New-Object System.Windows.Forms.Button
+ $Updateerror0x800f0922fixbutton.Location = New-Object System.Drawing.Size(35,95)
+ $Updateerror0x800f0922fixbutton.Size = New-Object System.Drawing.Size(120,23)
+ $Updateerror0x800f0922fixbutton.Text = "Error_F0922 Fix"
+ $Updateerror0x800f0922fixbutton.Add_Click($Updateerror0x800f0922fix)
 #Exit Button
  $exitButton = New-Object System.Windows.Forms.Button
  $exitButton.Location = New-Object System.Drawing.Point(135,270)
@@ -101,6 +116,7 @@ $MaxpathRegpath =  . $PSScriptRoot\MaxPathReg.ps1
  $Form.Controls.Add($TroubleWindowsUpdatesButton)
  $Form.Controls.Add($TroubleStorebutton)
  $Form.Controls.Add($Maxpathregbutton)
+ $Form.Controls.Add($Updateerror0x800f0922fixButton)
 #Null command to stop console spam
  $Form.ShowDialog() > $null
 
