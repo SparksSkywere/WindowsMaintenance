@@ -15,7 +15,7 @@ Make sure you are running administrator on the exe or .ps1 script
 # What things this script does:
 
 Maintenance
-1. Windows Install Cleanup (There is another script I made which JUST contains this if you want that specifically)
+1. Windows Install Cleanup (Standalone: https://github.com/SparksSkywere/Windows-10-Install-Cleaner)
 2. Re-install Windows default Apps
 3. Uninstall One-Drive
 4. Disk Cleanup Utility
