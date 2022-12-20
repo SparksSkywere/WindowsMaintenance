@@ -49,6 +49,6 @@ Start-Process "explorer.exe"
 
 Write-Output "Wait for EX reload.."
 Start-Sleep 15
-
+[System.Windows.MessageBox]::Show('Operation Completed','Windows Troubleshooting','Ok','Information')
 Exit
 #Made by Chris Masters

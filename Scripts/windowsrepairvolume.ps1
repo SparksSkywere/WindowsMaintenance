@@ -33,33 +33,38 @@ function Show-Console
 #To show the console change "-hide" to "-show"
 show-console -hide
 
+#Functions
+function ExecutionCompleted () {
+    [System.Windows.MessageBox]::Show('Operation Completed','Windows Maintenance','Ok','Information')
+}
+
 #Drive Letters + Check command
-$A = {Repair-Volume -DriveLetter A -OfflineScanAndFix}
-$B = {Repair-Volume -DriveLetter B -OfflineScanAndFix}
-$C = {Repair-Volume -DriveLetter C -OfflineScanAndFix}
-$D = {Repair-Volume -DriveLetter D -OfflineScanAndFix}
-$E = {Repair-Volume -DriveLetter E -OfflineScanAndFix}
-$F = {Repair-Volume -DriveLetter F -OfflineScanAndFix}
-$G = {Repair-Volume -DriveLetter G -OfflineScanAndFix}
-$H = {Repair-Volume -DriveLetter H -OfflineScanAndFix}
-$I = {Repair-Volume -DriveLetter I -OfflineScanAndFix}
-$J = {Repair-Volume -DriveLetter J -OfflineScanAndFix}
-$K = {Repair-Volume -DriveLetter K -OfflineScanAndFix}
-$L = {Repair-Volume -DriveLetter L -OfflineScanAndFix}
-$M = {Repair-Volume -DriveLetter M -OfflineScanAndFix}
-$N = {Repair-Volume -DriveLetter N -OfflineScanAndFix}
-$O = {Repair-Volume -DriveLetter O -OfflineScanAndFix}
-$P = {Repair-Volume -DriveLetter P -OfflineScanAndFix}
-$Q = {Repair-Volume -DriveLetter Q -OfflineScanAndFix}
-$R = {Repair-Volume -DriveLetter R -OfflineScanAndFix}
-$S = {Repair-Volume -DriveLetter S -OfflineScanAndFix}
-$T = {Repair-Volume -DriveLetter T -OfflineScanAndFix}
-$U = {Repair-Volume -DriveLetter U -OfflineScanAndFix}
-$V = {Repair-Volume -DriveLetter V -OfflineScanAndFix}
-$W = {Repair-Volume -DriveLetter W -OfflineScanAndFix}
-$X = {Repair-Volume -DriveLetter X -OfflineScanAndFix}
-$Y = {Repair-Volume -DriveLetter Y -OfflineScanAndFix}
-$Z = {Repair-Volume -DriveLetter Z -OfflineScanAndFix}
+$A = {Repair-Volume -DriveLetter A -OfflineScanAndFix | ExecutionCompleted}
+$B = {Repair-Volume -DriveLetter B -OfflineScanAndFix | ExecutionCompleted}
+$C = {Repair-Volume -DriveLetter C -OfflineScanAndFix | ExecutionCompleted}
+$D = {Repair-Volume -DriveLetter D -OfflineScanAndFix | ExecutionCompleted}
+$E = {Repair-Volume -DriveLetter E -OfflineScanAndFix | ExecutionCompleted}
+$F = {Repair-Volume -DriveLetter F -OfflineScanAndFix | ExecutionCompleted}
+$G = {Repair-Volume -DriveLetter G -OfflineScanAndFix | ExecutionCompleted}
+$H = {Repair-Volume -DriveLetter H -OfflineScanAndFix | ExecutionCompleted}
+$I = {Repair-Volume -DriveLetter I -OfflineScanAndFix | ExecutionCompleted}
+$J = {Repair-Volume -DriveLetter J -OfflineScanAndFix | ExecutionCompleted}
+$K = {Repair-Volume -DriveLetter K -OfflineScanAndFix | ExecutionCompleted}
+$L = {Repair-Volume -DriveLetter L -OfflineScanAndFix | ExecutionCompleted}
+$M = {Repair-Volume -DriveLetter M -OfflineScanAndFix | ExecutionCompleted}
+$N = {Repair-Volume -DriveLetter N -OfflineScanAndFix | ExecutionCompleted}
+$O = {Repair-Volume -DriveLetter O -OfflineScanAndFix | ExecutionCompleted}
+$P = {Repair-Volume -DriveLetter P -OfflineScanAndFix | ExecutionCompleted}
+$Q = {Repair-Volume -DriveLetter Q -OfflineScanAndFix | ExecutionCompleted}
+$R = {Repair-Volume -DriveLetter R -OfflineScanAndFix | ExecutionCompleted}
+$S = {Repair-Volume -DriveLetter S -OfflineScanAndFix | ExecutionCompleted}
+$T = {Repair-Volume -DriveLetter T -OfflineScanAndFix | ExecutionCompleted}
+$U = {Repair-Volume -DriveLetter U -OfflineScanAndFix | ExecutionCompleted}
+$V = {Repair-Volume -DriveLetter V -OfflineScanAndFix | ExecutionCompleted}
+$W = {Repair-Volume -DriveLetter W -OfflineScanAndFix | ExecutionCompleted}
+$X = {Repair-Volume -DriveLetter X -OfflineScanAndFix | ExecutionCompleted}
+$Y = {Repair-Volume -DriveLetter Y -OfflineScanAndFix | ExecutionCompleted}
+$Z = {Repair-Volume -DriveLetter Z -OfflineScanAndFix | ExecutionCompleted}
 
 #Create form containing all the buttons to the commands set above
 [System.Windows.MessageBox]::Show('When you select a drive the Scanning will run in the background or ask to reboot (If system drive has been selected), check task manager for disk usage if your worried it is not doing anything','Windows Volume Check','Ok','Warning') | Out-Null

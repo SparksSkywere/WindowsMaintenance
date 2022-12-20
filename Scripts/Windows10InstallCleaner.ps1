@@ -93,7 +93,6 @@ If ($appsonly) {
             DisService
 }
 }
-
-
+[System.Windows.MessageBox]::Show('Operation Completed','Windows Troubleshooting','Ok','Information')
 Exit
 #Created By Chris Masters

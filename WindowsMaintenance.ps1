@@ -36,19 +36,28 @@ function Show-Console
 #To show the console change "-hide" to "-show"
 show-console -hide
 
+#Functions
+function RestartNeeded () {
+    [System.Windows.MessageBox]::Show('Please restart the computer','Windows Maintenance','Ok','Information')
+}
+function ExecutionCompleted () {
+    [System.Windows.MessageBox]::Show('Operation Completed','Windows Maintenance','Ok','Information')
+}
+
 #Script path locations for loading
     #Scriptname = {filename+path/command}
     $WindowsInstallCleanup = {.\Scripts\Windows10InstallCleaner.ps1}
     $WindowsUninstallOneDrive = {.\Scripts\Uninstallonedrive.ps1}
-    $WindowsDiskCleanup = {cleanmgr /tuneup:1}
+    $WindowsDiskCleanup = {cleanmgr /tuneup:1 | ExecutionCompleted}
     $Usercleanup = {.\Scripts\UserCleaner.ps1}
     $Defrag = {.\Scripts\windowsdefrag.ps1}
     $DiskCheck = {.\Scripts\windowsrepairvolume.ps1}
-    $ReinstallApps = {Get-AppXPackage -AllUsers | ForEach-Object {Add-AppxPackage -DisableDevelopmentMode -Register "$($_.InstallLocation)\AppXManifest.xml"}}
-    $DelProf = {.\Scripts\Delprof.exe /u /q}
-    $DISMRestore = {DISM /Online /Cleanup-Image /ScanHealth | DISM /Online /cleanup-Image /Restorehealth}
-    $SFCRepair = {sfc /scannow}
+    $ReinstallApps = {Get-AppXPackage -AllUsers | ForEach-Object {Add-AppxPackage -DisableDevelopmentMode -Register "$($_.InstallLocation)\AppXManifest.xml"} | ExecutionCompleted}
+    $DelProf = {.\Scripts\Delprof.exe /u /q | ExecutionCompleted}
+    $DISMRestore = {DISM /Online /Cleanup-Image /ScanHealth | DISM /Online /cleanup-Image /Restorehealth | ExecutionCompleted}
+    $SFCRepair = {sfc /scannow | ExecutionCompleted}
     $WindowsTroubleshooting = {.\Scripts\Troubleshooting.ps1}
+    $SystemOptimisation = {.\Scripts\SystemOptimisation.ps1}
     #$CustomChanges = {.\Scripts\CustomChanges.ps1}
 
 #Form GUI for loading
@@ -130,6 +139,12 @@ show-console -hide
     $Troubleshootbutton.Size = New-Object System.Drawing.Size(120,23)
     $Troubleshootbutton.Text = "Troubleshooting"
     $Troubleshootbutton.Add_Click($WindowsTroubleshooting)
+#Windows Optimisation
+    $OptimisationButton = New-Object System.Windows.Forms.Button
+    $OptimisationButton.Location = New-Object System.Drawing.Size(165,185)
+    $OptimisationButton.Size = New-Object System.Drawing.Size(130,23)
+    $OptimisationButton.Text = "System Optimisation"
+    $OptimisationButton.Add_Click($SystemOptimisation)
 #Custom Changes
     #$Customchangesbutton = New-Object System.Windows.Forms.Button
     #$Customchangesbutton.Location = New-Object System.Drawing.Size(165,155)
@@ -157,6 +172,7 @@ show-console -hide
     $Form.Controls.Add($DiskCheckbutton)
     $Form.Controls.Add($SFCRepairbutton)
     $Form.Controls.Add($Troubleshootbutton)
+    $Form.Controls.Add($OptimisationButton)
     #$Form.Controls.Add($Customchangesbutton)
 #Null command to stop console spam
     $Form.ShowDialog() > $null

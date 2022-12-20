@@ -33,33 +33,38 @@ function Show-Console
 #To show the console change "-hide" to "-show"
 show-console -hide
 
+#Functions
+function ExecutionCompleted () {
+    [System.Windows.MessageBox]::Show('Operation Completed','Windows Troubleshooting','Ok','Information')
+}
+
 #Drive Letters + Defrag command
-$A = {Optimize-Volume -DriveLetter A -Defrag}
-$B = {Optimize-Volume -DriveLetter B -Defrag}
-$C = {Optimize-Volume -DriveLetter C -Defrag}
-$D = {Optimize-Volume -DriveLetter D -Defrag}
-$E = {Optimize-Volume -DriveLetter E -Defrag}
-$F = {Optimize-Volume -DriveLetter F -Defrag}
-$G = {Optimize-Volume -DriveLetter G -Defrag}
-$H = {Optimize-Volume -DriveLetter H -Defrag}
-$I = {Optimize-Volume -DriveLetter I -Defrag}
-$J = {Optimize-Volume -DriveLetter J -Defrag}
-$K = {Optimize-Volume -DriveLetter K -Defrag}
-$L = {Optimize-Volume -DriveLetter L -Defrag}
-$M = {Optimize-Volume -DriveLetter M -Defrag}
-$N = {Optimize-Volume -DriveLetter N -Defrag}
-$O = {Optimize-Volume -DriveLetter O -Defrag}
-$P = {Optimize-Volume -DriveLetter P -Defrag}
-$Q = {Optimize-Volume -DriveLetter Q -Defrag}
-$R = {Optimize-Volume -DriveLetter R -Defrag}
-$S = {Optimize-Volume -DriveLetter S -Defrag}
-$T = {Optimize-Volume -DriveLetter T -Defrag}
-$U = {Optimize-Volume -DriveLetter U -Defrag}
-$V = {Optimize-Volume -DriveLetter V -Defrag}
-$W = {Optimize-Volume -DriveLetter W -Defrag}
-$X = {Optimize-Volume -DriveLetter X -Defrag}
-$Y = {Optimize-Volume -DriveLetter Y -Defrag}
-$Z = {Optimize-Volume -DriveLetter Z -Defrag}
+$A = {Optimize-Volume -DriveLetter A -Defrag | ExecutionCompleted}
+$B = {Optimize-Volume -DriveLetter B -Defrag | ExecutionCompleted}
+$C = {Optimize-Volume -DriveLetter C -Defrag | ExecutionCompleted}
+$D = {Optimize-Volume -DriveLetter D -Defrag | ExecutionCompleted}
+$E = {Optimize-Volume -DriveLetter E -Defrag | ExecutionCompleted}
+$F = {Optimize-Volume -DriveLetter F -Defrag | ExecutionCompleted}
+$G = {Optimize-Volume -DriveLetter G -Defrag | ExecutionCompleted}
+$H = {Optimize-Volume -DriveLetter H -Defrag | ExecutionCompleted}
+$I = {Optimize-Volume -DriveLetter I -Defrag | ExecutionCompleted}
+$J = {Optimize-Volume -DriveLetter J -Defrag | ExecutionCompleted}
+$K = {Optimize-Volume -DriveLetter K -Defrag | ExecutionCompleted}
+$L = {Optimize-Volume -DriveLetter L -Defrag | ExecutionCompleted}
+$M = {Optimize-Volume -DriveLetter M -Defrag | ExecutionCompleted}
+$N = {Optimize-Volume -DriveLetter N -Defrag | ExecutionCompleted}
+$O = {Optimize-Volume -DriveLetter O -Defrag | ExecutionCompleted}
+$P = {Optimize-Volume -DriveLetter P -Defrag | ExecutionCompleted}
+$Q = {Optimize-Volume -DriveLetter Q -Defrag | ExecutionCompleted}
+$R = {Optimize-Volume -DriveLetter R -Defrag | ExecutionCompleted}
+$S = {Optimize-Volume -DriveLetter S -Defrag | ExecutionCompleted}
+$T = {Optimize-Volume -DriveLetter T -Defrag | ExecutionCompleted}
+$U = {Optimize-Volume -DriveLetter U -Defrag | ExecutionCompleted}
+$V = {Optimize-Volume -DriveLetter V -Defrag | ExecutionCompleted}
+$W = {Optimize-Volume -DriveLetter W -Defrag | ExecutionCompleted}
+$X = {Optimize-Volume -DriveLetter X -Defrag | ExecutionCompleted}
+$Y = {Optimize-Volume -DriveLetter Y -Defrag | ExecutionCompleted}
+$Z = {Optimize-Volume -DriveLetter Z -Defrag | ExecutionCompleted}
 
 #Create form containing all the buttons to the commands set above
 [System.Windows.MessageBox]::Show('When you select a drive the defrag will run in the background, check task manager for disk usage','Windows Quick Defrag','Ok','Warning') | Out-Null

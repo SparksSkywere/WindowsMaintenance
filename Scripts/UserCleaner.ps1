@@ -29,11 +29,17 @@ function Show-Console
 #To show the console change "-hide" to "-show"
 show-console -hide
 
+#Functions
+function ExecutionCompleted () {
+    [System.Windows.MessageBox]::Show('Operation Completed','Windows Maintenance','Ok','Information')
+}
+
 #Cleanup commands and locations
-$Cleanup_CTemp = {Get-ChildItem -Path 'C:\Windows\Temp' * -Recurse | Remove-Item}
-$Cleanup_Prefetch = {Get-ChildItem -Path 'C:\Windows\Prefetch' * -Recurse | Remove-Item}
-$Cleanup_DSLocal = {Get-ChildItem -Path 'C:\Documents and Settings\*\Local Settings\temp\' * -Recurse | Remove-Item}
-$Cleanup_Appdata = {Get-ChildItem -Path 'C:\Users\*\Appdata\Local\Temp\' * -Recurse | Remove-Item}
+$Cleanup_CTemp = {Get-ChildItem -Path 'C:\Windows\Temp' * -Recurse | Remove-Item | ExecutionCompleted}
+$Cleanup_Prefetch = {Get-ChildItem -Path 'C:\Windows\Prefetch' * -Recurse | Remove-Item | ExecutionCompleted}
+$Cleanup_DSLocal = {Get-ChildItem -Path 'C:\Documents and Settings\*\Local Settings\temp\' * -Recurse | Remove-Item | ExecutionCompleted}
+$Cleanup_Appdata = {Get-ChildItem -Path 'C:\Users\*\Appdata\Local\Temp\' * -Recurse | Remove-Item | ExecutionCompleted}
+$DoAll = {Get-ChildItem -Path 'C:\Windows\Temp' * -Recurse | Remove-Item | Get-ChildItem -Path 'C:\Windows\Prefetch' * -Recurse | Remove-Item | Get-ChildItem -Path 'C:\Documents and Settings\*\Local Settings\temp\' * -Recurse | Remove-Item | Get-ChildItem -Path 'C:\Users\*\Appdata\Local\Temp\' * -Recurse | Remove-Item | ExecutionCompleted}
 
 #Form with buttons to area's for cleanup
 $form = New-Object System.Windows.Forms.Form
@@ -67,12 +73,18 @@ $form.Icon = $objIcon
     $ClearAppdatabutton.Text = "Clear Local Appdata"
     $ClearAppdatabutton.Add_Click($Cleanup_Appdata)
 
+    $DoAllbutton = New-Object System.Windows.Forms.Button
+    $DoAllbutton.Location = New-Object System.Drawing.Size(25,135)
+    $DoAllbutton.Size = New-Object System.Drawing.Size(135,23)
+    $DoAllbutton.Text = "Do All Above"
+    $DoAllbutton.Add_Click($DoAll)
+
     $Form.Controls.Add($CleanupCbutton)
     $Form.Controls.Add($CleanupPrefetchbutton)
     $Form.Controls.Add($ClearDSbutton)
     $Form.Controls.Add($ClearAppdatabutton)
+    $Form.Controls.Add($DoAllbutton)
 
 $form.showdialog()
-
 Exit
 #Created by Chris Masters
