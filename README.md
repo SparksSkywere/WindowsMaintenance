@@ -10,11 +10,11 @@ Quick Readme for the exe file not loading
 Make sure you are running administrator on the exe or .ps1 script
 
 1. (If you already set execution policy skip to step 2) Run the other ps1 script that will set execution policy to "bypass" do not worry windows will automatically restore the execution policy when the computer is next turned on
-2. Then run the WindowsMaintenance exe 
+2. Then run the WindowsMaintenance.exe
 
 # What things this script does:
 
-Maintenance
+Maintenance:
 1. Windows Install Cleanup (Standalone: https://github.com/SparksSkywere/Windows-10-Install-Cleaner)
 2. Re-install Windows default Apps
 3. Uninstall One-Drive
@@ -25,10 +25,9 @@ Maintenance
 8. Defragmentation Utility
 9. Windows System Scan and repair
 10. Check Disk (Volume Repair)
-11. (Currently Developing) System Optimisation
+11. System Optimisations
 
-TroubleShooting
-
+TroubleShooting:
 1. Internet Fix
 2. Windows Update
 3. Microsoft Store
