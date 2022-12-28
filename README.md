@@ -28,10 +28,10 @@ Maintenance:
 11. System Optimisations
 
 TroubleShooting:
-1. Internet Fix
+1. Internet
 2. Windows Update
 3. Microsoft Store
-4. Max Path length registry increase
+4. Max Path length registry change
 5. Windows Update Error 0x800f0922 Fix
 
 # Custom Script
