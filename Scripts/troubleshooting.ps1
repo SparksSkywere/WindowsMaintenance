@@ -35,7 +35,7 @@ function Show-Console
 }
 #end of powershell console hiding
 #To show the console change "-hide" to "-show"
-show-console -show
+show-console -hide
 
 #Functions
 function RestartNeeded () {
@@ -47,14 +47,80 @@ function ExecutionCompleted () {
 }
 
 #$scriptPath = split-path -parent $MyInvocation.MyCommand.Definition
+#Functions to split lots of the work up into more readable bits / easier to configure
+#MaxReg
+function Maxpathreg () {Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\FileSystem' -Name 'LongPathsEnabled' -value 1}
+#Troubleshooting Internet
+function AdvFirewallReset () {netsh advfirewall reset}
+function netshipreset () {netsh int ip reset}
+function netshipresetipv6 () {netsh int ipv6 reset}
+function netwinsockreset () {netsh winsock reset}
+function flushdns () {IPconfig /flushdns}
+function iprelease () {IPconfig /release}
+function iprenew () {IPConfig /Renew}
+#Troubleshooting Windows Updates
+function netstopbits () {net stop bits}
+function netstopwuauserv () {net stop wuauserv}
+function netstopappidsvc () {net stop appidsvc}
+function netstopcryptsvc () {net stop cryptsvc}
+function DeleteSoftwareDistribution () {Get-ChildItem -Path '%systemroot%\SoftwareDistribution' * -Recurse | Remove-Item}
+function Deletecatroot2 () {Get-ChildItem -Path '%systemroot%\system32\catroot2' * -Recurse | Remove-Item}
+function associateatl () {regsvr32.exe /s atl.dll}
+function associateurlmon () {regsvr32.exe /s urlmon.dll}
+function associatemshtml () {regsvr32.exe /s mshtml.dll}
+function associateshdocvw () {regsvr32.exe /s shdocvw.dll}
+function associatebrowseui () {regsvr32.exe /s browseui.dll}
+function associatejscript () {regsvr32.exe /s jscript.dll}
+function associatevbscript () {regsvr32.exe /s vbscript.dll}
+function associatescrrun () {regsvr32.exe /s scrrun.dll}
+function associatemsxml () {regsvr32.exe /s msxml.dll}
+function associatemsxml3 () {regsvr32.exe /s msxml3.dll}
+function associatemsxm16 () {regsvr32.exe /s msxml6.dll}
+function associateactxprxy () {regsvr32.exe /s actxprxy.dll}
+function associatesoftpub () {regsvr32.exe /s softpub.dll}
+function associatewintrust () {regsvr32.exe /s wintrust.dll}
+function associatedssenh () {regsvr32.exe /s dssenh.dll}
+function associatersaenh () {regsvr32.exe /s rsaenh.dll}
+function associategpkcsp () {regsvr32.exe /s gpkcsp.dll}
+function associatesccbase () {regsvr32.exe /s sccbase.dll}
+function associateslbcsp () {regsvr32.exe /s slbcsp.dll}
+function associatecryptdlg () {regsvr32.exe /s cryptdlg.dll}
+function associateoleaut32 () {regsvr32.exe /s oleaut32.dll}
+function associateole32 () {regsvr32.exe /s ole32.dll}
+function associateshell32 () {regsvr32.exe /s shell32.dll}
+function associateinitpki () {regsvr32.exe /s initpki.dll}
+function associatewuapi () {regsvr32.exe /s wuapi.dll}
+function associatewuaueng () {regsvr32.exe /s wuaueng.dll}
+function associatewuaueng1 () {regsvr32.exe /s wuaueng1.dll}
+function associatewucltui () {regsvr32.exe /s wucltui.dll}
+function associatewups () {regsvr32.exe /s wups.dll}
+function associatewups2 () {regsvr32.exe /s wups2.dll}
+function associatewuweb () {regsvr32.exe /s wuweb.dll}
+function associateqmgr () {regsvr32.exe /s qmgr.dll}
+function associateqmgrprxy () {regsvr32.exe /s qmgrprxy.dll}
+function associatewucltux () {regsvr32.exe /s wucltux.dll}
+function associatemuweb () {regsvr32.exe /s muweb.dll}
+function associatewuwebv () {regsvr32.exe /s wuwebv.dll}
+function netwinsockreset () {netsh winsock reset}
+function netwinsockproxyreset () {netsh winsock reset proxy}
+function netstartbits () {net start bits}
+function netstartwuauserv () {net start wuauserv}
+function netstartappidsvc () {net start appidsvc}
+function netstartcryptsvc () {net start cryptsvc}
+function wsusscan () {wuauclt /resetauthorization /detectnow}
+#Update 0x800f0922 Fix
+function lodctrsync () {lodctr /R | winmgmt.exe /RESYNCPERF}
+function trustedinstallerauto () {Get-Service -Name "trustedinstaller" | Set-Service -StartupType Automatic}
+function trustedinstallerstart () {net start trustedinstaller}
+function DISMRestore () {Dism /Online /Cleanup-Image /RestoreHealth | ExecutionCompleted}
 
 #Commands for the buttons
     #$Commandname = {Command}
-    $TroubleInternet = {netsh advfirewall reset | netsh int ip reset | netsh int ipv6 reset | netsh winsock reset | IPconfig /flushdns | IPconfig /release | IPConfig /Renew | ExecutionCompleted}
-    $TroubleWindowsUpdates = {net stop bits | net stop wuauserv | net stop appidsvc | net stop cryptsvc | Get-ChildItem -Path '%systemroot%\SoftwareDistribution' * -Recurse | Remove-Item | Get-ChildItem -Path '%systemroot%\system32\catroot2' * -Recurse | Remove-Item | regsvr32.exe /s atl.dll | regsvr32.exe /s urlmon.dll | regsvr32.exe /s mshtml.dll | regsvr32.exe /s shdocvw.dll | regsvr32.exe /s browseui.dll | regsvr32.exe /s jscript.dll | regsvr32.exe /s vbscript.dll | regsvr32.exe /s scrrun.dll | regsvr32.exe /s msxml.dll | regsvr32.exe /s msxml3.dll | regsvr32.exe /s msxml6.dll | regsvr32.exe /s actxprxy.dll | regsvr32.exe /s softpub.dll | regsvr32.exe /s wintrust.dll | regsvr32.exe /s dssenh.dll | regsvr32.exe /s rsaenh.dll | regsvr32.exe /s gpkcsp.dll | regsvr32.exe /s sccbase.dll | regsvr32.exe /s slbcsp.dll | regsvr32.exe /s cryptdlg.dll | regsvr32.exe /s oleaut32.dll | regsvr32.exe /s ole32.dll | regsvr32.exe /s shell32.dll | regsvr32.exe /s initpki.dll | regsvr32.exe /s wuapi.dll | regsvr32.exe /s wuaueng.dll | regsvr32.exe /s wuaueng1.dll | regsvr32.exe /s wucltui.dll | regsvr32.exe /s wups.dll | regsvr32.exe /s wups2.dll | regsvr32.exe /s wuweb.dll | regsvr32.exe /s qmgr.dll | regsvr32.exe /s qmgrprxy.dll | regsvr32.exe /s wucltux.dll | regsvr32.exe /s muweb.dll | regsvr32.exe /s wuwebv.dll | netsh winsock reset | netsh winsock reset proxy | net start bits | net start wuauserv | net start appidsvc | net start cryptsvc | wuauclt /resetauthorization /detectnow | ExecutionCompleted}
-    $TroubleStore = {WSReset.exe}
-    $Maxpathreg = {Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\FileSystem' -Name 'LongPathsEnabled' -value 1 | ExecutionCompleted}
-    $Updateerror0x800f0922fix = {lodctr /R | winmgmt.exe /RESYNCPERF | sc config trustedinstaller start= auto | net start trustedinstaller | Dism /Online /Cleanup-Image /RestoreHealth | ExecutionCompleted}
+    $TroubleInternet = {AdvFirewallReset | netshipreset | netshipresetipv6 | netwinsockreset | flushdns | iprelease | iprenew | ExecutionCompleted}
+    $TroubleWindowsUpdates = {netstopbits | netstopwuauserv | netstopappidsvc | netstopcryptsvc | DeleteSoftwareDistribution | Deletecatroot2 | associateatl | associateurlmon | associatemshtml | associateshdocvw | associatebrowseui | associatejscript | associatevbscript | associatescrrun | associatemsxml | associatemsxml3 | associatemsxm16 | associateactxprxy | associatesoftpub | associatewintrust | associatedssenh | associatersaenh | associategpkcsp | associatesccbase | associateslbcsp | associatecryptdlg | associateoleaut32 | associateole32 | associateshell32 | associateinitpki | associatewuapi | associatewuaueng | associatewuaueng1 | associatewucltui | associatewups | associatewups2 | associatewuweb | associateqmgr | associateqmgrprxy | associatewucltux | associatemuweb | associatewuwebv | netwinsockreset | netwinsockproxyreset | netstartbits | netstartwuauserv | netstartappidsvc | netstartcryptsvc | wsusscan | ExecutionCompleted}
+    $TroubleStore = {WSReset.exe | ExecutionCompleted}
+    $Maxpathreg = {Maxpathreg | ExecutionCompleted}
+    $Updateerror0x800f0922fix = {lodctrsync | trustedinstallerauto | trustedinstallerstart | DISMRestore | ExecutionCompleted}
     #$HardwareDeviceTroubleshooter = {msdt.exe -id DeviceDiagnostic}
     #DISM /imageC:\ /Cleanup-Image /RestoreHealth /Source:C:\Windows10\Sources\install.esd /Scratchdir:C:\Scratch
 
