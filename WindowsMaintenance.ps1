@@ -43,6 +43,12 @@ function RestartNeeded () {
 function ExecutionCompleted () {
     [System.Windows.MessageBox]::Show('Operation Completed','Windows Maintenance','Ok','Information')
 }
+function SFCSCan () {
+    [System.Windows.MessageBox]::Show('SFC Scan Completed','Windows Maintenance','Ok','Information')
+}
+function DISMCompleted () {
+    [System.Windows.MessageBox]::Show('DISM Scan Completed','Windows Maintenance','Ok','Information')
+}
 
 #Script path locations for loading
     #Scriptname = {filename+path/command}
@@ -54,8 +60,8 @@ function ExecutionCompleted () {
     $DiskCheck = {.\Scripts\windowsrepairvolume.ps1}
     $ReinstallApps = {Get-AppXPackage -AllUsers | ForEach-Object {Add-AppxPackage -DisableDevelopmentMode -Register "$($_.InstallLocation)\AppXManifest.xml"} | ExecutionCompleted}
     $DelProf = {.\Scripts\Delprof.exe /u /q | ExecutionCompleted}
-    $DISMRestore = {DISM /Online /Cleanup-Image /ScanHealth | DISM /Online /cleanup-Image /Restorehealth | ExecutionCompleted}
-    $SFCRepair = {sfc /scannow | ExecutionCompleted}
+    $DISMRestore = {DISM /Online /Cleanup-Image /ScanHealth | DISM /Online /cleanup-Image /Restorehealth | DISMCompleted}
+    $SFCRepair = {sfc /scannow | SFCSCan}
     $WindowsTroubleshooting = {.\Scripts\Troubleshooting.ps1}
     $SystemOptimisation = {.\Scripts\SystemOptimisation.ps1}
     #$CustomChanges = {.\Scripts\CustomChanges.ps1}
@@ -175,6 +181,5 @@ function ExecutionCompleted () {
     $Form.Controls.Add($OptimisationButton)
     #$Form.Controls.Add($Customchangesbutton)
 #Null command to stop console spam
-    $Form.ShowDialog() > $null
-
+$Form.ShowDialog() > $null
 #Created By Chris Masters

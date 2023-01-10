@@ -7,7 +7,6 @@ Clear-Host
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName System.Drawing
-
 function Show-Console
 {
     param ([Switch]$Show,[Switch]$Hide)
@@ -184,7 +183,5 @@ function DISMRestore () {Dism /Online /Cleanup-Image /RestoreHealth | ExecutionC
  $Form.Controls.Add($Maxpathregbutton)
  $Form.Controls.Add($Updateerror0x800f0922fixButton)
 #Null command to stop console spam
- $Form.ShowDialog() > $null
-
-Exit
+$Form.ShowDialog() > $null
 #Made by Chris Masters

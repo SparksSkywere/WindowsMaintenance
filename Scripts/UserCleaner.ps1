@@ -39,7 +39,40 @@ $Cleanup_CTemp = {Get-ChildItem -Path 'C:\Windows\Temp' * -Recurse | Remove-Item
 $Cleanup_Prefetch = {Get-ChildItem -Path 'C:\Windows\Prefetch' * -Recurse | Remove-Item | ExecutionCompleted}
 $Cleanup_DSLocal = {Get-ChildItem -Path 'C:\Documents and Settings\*\Local Settings\temp\' * -Recurse | Remove-Item | ExecutionCompleted}
 $Cleanup_Appdata = {Get-ChildItem -Path 'C:\Users\*\Appdata\Local\Temp\' * -Recurse | Remove-Item | ExecutionCompleted}
-$DoAll = {Get-ChildItem -Path 'C:\Windows\Temp' * -Recurse | Remove-Item | Get-ChildItem -Path 'C:\Windows\Prefetch' * -Recurse | Remove-Item | Get-ChildItem -Path 'C:\Documents and Settings\*\Local Settings\temp\' * -Recurse | Remove-Item | Get-ChildItem -Path 'C:\Users\*\Appdata\Local\Temp\' * -Recurse | Remove-Item | ExecutionCompleted}
+$CleanupSystem = {CleanupSystem | ExecutionCompleted}
+$DoAll = {Get-ChildItem -Path 'C:\Windows\Temp' * -Recurse | Remove-Item | Get-ChildItem -Path 'C:\Windows\Prefetch' * -Recurse | Remove-Item | Get-ChildItem -Path 'C:\Documents and Settings\*\Local Settings\temp\' * -Recurse | Remove-Item | Get-ChildItem -Path 'C:\Users\*\Appdata\Local\Temp\' * -Recurse | Remove-Item | CleanupSystem |ExecutionCompleted}
+
+function CleanupSystem () {
+# Declare variables for the folders we want to clean up
+$tempFolder = "$env:temp"
+$appData = "$env:appdata"
+$localAppData = "$env:localappdata"
+
+# Delete temporary files
+Get-ChildItem $tempFolder -Include *.* -File -Recurse | Remove-Item
+
+# Delete temporary internet files
+Remove-Item "$appData\Microsoft\Windows\INetCache\*" -Recurse -Force
+
+# Delete files in the recycle bin that are older than 30 days
+$recycleBin = [Microsoft.VisualBasic.FileIO.RecycleBin]::GetInfo()
+foreach($item in $recycleBin) {
+    if($item.DeletionTime -lt (Get-Date).AddDays(-30)) {
+        [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($item.OriginalLocation, 
+            [Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs, 
+            [Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)
+    }
+}
+
+# Clear the event logs
+Clear-EventLog -LogName Application
+Clear-EventLog -LogName Security
+Clear-EventLog -LogName System
+
+# Delete files in the temporary AppData folders that are older than 30 days
+Get-ChildItem $appData -Include *.* -File -Recurse | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) } | Remove-Item
+Get-ChildItem $localAppData -Include *.* -File -Recurse | Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-30) } | Remove-Item
+} 
 
 #Form with buttons to area's for cleanup
 $form = New-Object System.Windows.Forms.Form
@@ -73,8 +106,14 @@ $form.Icon = $objIcon
     $ClearAppdatabutton.Text = "Clear Local Appdata"
     $ClearAppdatabutton.Add_Click($Cleanup_Appdata)
 
+    $CleanupSystemButton = New-Object System.Windows.Forms.Button
+    $CleanupSystemButton.Location = New-Object System.Drawing.Size(25,135)
+    $CleanupSystemButton.Size = New-Object System.Drawing.Size(135,23)
+    $CleanupSystemButton.Text = "Cleanup System"
+    $CleanupSystemButton.Add_Click($CleanupSystem)
+
     $DoAllbutton = New-Object System.Windows.Forms.Button
-    $DoAllbutton.Location = New-Object System.Drawing.Size(25,135)
+    $DoAllbutton.Location = New-Object System.Drawing.Size(25,165)
     $DoAllbutton.Size = New-Object System.Drawing.Size(135,23)
     $DoAllbutton.Text = "Do All Above"
     $DoAllbutton.Add_Click($DoAll)
@@ -83,6 +122,7 @@ $form.Icon = $objIcon
     $Form.Controls.Add($CleanupPrefetchbutton)
     $Form.Controls.Add($ClearDSbutton)
     $Form.Controls.Add($ClearAppdatabutton)
+    $Form.Controls.Add($CleanupSystemButton)
     $Form.Controls.Add($DoAllbutton)
 
 $form.showdialog()

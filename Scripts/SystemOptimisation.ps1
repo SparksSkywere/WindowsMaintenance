@@ -149,4 +149,4 @@ function DisableBackgroundAccess () {Set-ItemProperty -Path "HKCU:\Software\Micr
  $Form.Controls.Add($DisableTelemetrybutton)
  #$Form.Controls.Add($Customchangesbutton)
 #Null command to stop console spam
- $Form.ShowDialog() > $null
+$Form.ShowDialog() > $null
