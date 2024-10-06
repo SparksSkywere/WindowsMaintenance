@@ -1,0 +1,1 @@
+# Work on adding a loading bar to show current progress, you may also use a built in loading bar.

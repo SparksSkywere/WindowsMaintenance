@@ -1,185 +1,248 @@
-#Set Powershell Attribute
+# Clear Host and Set Execution Policy
 Set-ExecutionPolicy Bypass -Force
 Clear-Host
-#Windows Cleaner Launcher of my other PS1 scripts to create a large form of options
 
-#Type Loader
+# Load necessary .NET types
 Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName System.Drawing
-function Show-Console
-{
-    param ([Switch]$Show,[Switch]$Hide)
-    if (-not ("Console.Window" -as [type])) { 
 
+# Show or hide console window
+function Show-Console {
+    param ([Switch]$Show, [Switch]$Hide)
+
+    if (-not ("Console.Window" -as [type])) {
         Add-Type -Name Window -Namespace Console -MemberDefinition '
-        [DllImport("Kernel32.dll")]
-        public static extern IntPtr GetConsoleWindow();
-
-        [DllImport("user32.dll")]
-        public static extern bool ShowWindow(IntPtr hWnd, Int32 nCmdShow);
+            [DllImport("Kernel32.dll")]
+            public static extern IntPtr GetConsoleWindow();
+            [DllImport("user32.dll")]
+            public static extern bool ShowWindow(IntPtr hWnd, Int32 nCmdShow);
         '
     }
-    if ($Show)
-    {
-        $consolePtr = [Console.Window]::GetConsoleWindow()
-        $null = [Console.Window]::ShowWindow($consolePtr, 5)
+
+    $consolePtr = [Console.Window]::GetConsoleWindow()
+    if ($Show) { [Console.Window]::ShowWindow($consolePtr, 5) }
+    if ($Hide) { [Console.Window]::ShowWindow($consolePtr, 0) }
+}
+
+# Hide console
+Show-Console -Hide
+
+# Utility function to show messages
+function Show-MessageBox {
+    param (
+        [string]$Message,
+        [string]$Title = 'Windows Maintenance'
+    )
+    [System.Windows.MessageBox]::Show($Message, $Title, 'Ok', 'Information')
+}
+
+# Check if the script file exists before executing
+function Invoke-ScriptIfExists {
+    param (
+        [string]$ScriptPath
+    )
+    
+    if (Test-Path $ScriptPath) {
+        try {
+            Write-Host "Executing script: $ScriptPath" -ForegroundColor Green
+            . $ScriptPath
+            Write-Host "Script executed successfully: $ScriptPath" -ForegroundColor Green
+        } catch {
+            Write-Host "Error: Script execution failed for path: $ScriptPath" -ForegroundColor Red
+            Write-Host "Error details: $_" -ForegroundColor Red
+        }
+    } else {
+        Write-Host "Error: Script not found at path: $ScriptPath" -ForegroundColor Red
     }
-    if ($Hide)
-    {
-        $consolePtr = [Console.Window]::GetConsoleWindow()
-        #0 hide
-        $null = [Console.Window]::ShowWindow($consolePtr, 0)
+}
+
+# Function to detect the Windows OS version
+function Get-WindowsVersion {
+    $os = Get-CimInstance -ClassName CIM_OperatingSystem
+    
+    # Output the OS version for debugging
+    Write-Host "Detected OS Version: $($os.Version)" -ForegroundColor Cyan
+
+    # Check version for Windows 10 or Windows 11
+    if ($os.Version -like "10.0.1904*") {
+        return "Windows 10"
+    } elseif ($os.Version -like "10.0.22*") {
+        return "Windows 11"
+    } else {
+        return "Unknown OS"
     }
 }
-#end of powershell console hiding
-#To show the console change "-hide" to "-show"
-show-console -hide
 
-#Functions
-function RestartNeeded () {
-    [System.Windows.MessageBox]::Show('Please restart the computer','Windows Maintenance','Ok','Information')
-}
-function ExecutionCompleted () {
-    [System.Windows.MessageBox]::Show('Operation Completed','Windows Maintenance','Ok','Information')
-}
-function SFCSCan () {
-    [System.Windows.MessageBox]::Show('SFC Scan Completed','Windows Maintenance','Ok','Information')
-}
-function DISMCompleted () {
-    [System.Windows.MessageBox]::Show('DISM Scan Completed','Windows Maintenance','Ok','Information')
+# Determine which cleanup script to use based on the OS version
+$osVersion = Get-WindowsVersion
+Write-Host "OS Version Detected: $osVersion" -ForegroundColor Cyan
+
+switch ($osVersion) {
+    "Windows 10" {
+        Write-Host "Detected OS: Windows 10" -ForegroundColor Green
+        $installCleanerScript = ".\Scripts\Windows10InstallCleaner.ps1"
+    }
+    "Windows 11" {
+        Write-Host "Detected OS: Windows 11" -ForegroundColor Green
+        $installCleanerScript = ".\Scripts\Windows11InstallCleaner.ps1"
+    }
+    default {
+        Write-Host "Error: OS could not be determined or unsupported OS." -ForegroundColor Red
+        exit
+    }
 }
 
-#Script path locations for loading
-    #Scriptname = {filename+path/command}
-    $WindowsInstallCleanup = {.\Scripts\Windows10InstallCleaner.ps1}
-    $WindowsUninstallOneDrive = {.\Scripts\Uninstallonedrive.ps1}
-    $WindowsDiskCleanup = {cleanmgr /tuneup:1 | ExecutionCompleted}
-    $Usercleanup = {.\Scripts\UserCleaner.ps1}
-    $Defrag = {.\Scripts\windowsdefrag.ps1}
-    $DiskCheck = {.\Scripts\windowsrepairvolume.ps1}
-    $ReinstallApps = {Get-AppXPackage -AllUsers | ForEach-Object {Add-AppxPackage -DisableDevelopmentMode -Register "$($_.InstallLocation)\AppXManifest.xml"} | ExecutionCompleted}
-    $DelProf = {.\Scripts\Delprof.exe /u /q | ExecutionCompleted}
-    $DISMRestore = {DISM /Online /Cleanup-Image /ScanHealth | DISM /Online /cleanup-Image /Restorehealth | DISMCompleted}
-    $SFCRepair = {sfc /scannow | SFCSCan}
-    $WindowsTroubleshooting = {.\Scripts\Troubleshooting.ps1}
-    $SystemOptimisation = {.\Scripts\SystemOptimisation.ps1}
-    #$CustomChanges = {.\Scripts\CustomChanges.ps1}
+# Explicitly define each script block and validate their initialization
+$Scripts = @{
+    WindowsInstallCleanup    = [scriptblock]::Create({ Invoke-ScriptIfExists $installCleanerScript })
+    WindowsUninstallOneDrive = [scriptblock]::Create({ Invoke-ScriptIfExists ".\Scripts\Uninstallonedrive.ps1" })
+    WindowsCleaner           = [scriptblock]::Create({ Invoke-ScriptIfExists ".\Scripts\WindowsCleaner.ps1" })
+    Defrag                   = [scriptblock]::Create({ Invoke-ScriptIfExists ".\Scripts\windowsdefrag.ps1" })
+    DiskCheck                = [scriptblock]::Create({ Invoke-ScriptIfExists ".\Scripts\windowsrepairvolume.ps1" })
+    ReinstallApps            = [scriptblock]::Create({ 
+        try {
+            Get-AppXPackage -AllUsers | ForEach-Object { 
+                Add-AppxPackage -DisableDevelopmentMode -Register "$($_.InstallLocation)\AppXManifest.xml" 
+            }
+            Show-MessageBox 'Operation Completed' 
+        } catch {
+            Write-Host "Error executing ReinstallApps: $_" -ForegroundColor Red
+        }
+    })
+    DelProf                  = [scriptblock]::Create({ 
+        try {
+            Start-Process -FilePath .\Scripts\Delprof.exe -ArgumentList "/u /q" -Wait
+            Show-MessageBox 'Operation Completed' 
+        } catch {
+            Write-Host "Error executing DelProf: $_" -ForegroundColor Red
+        }
+    })
+    DISMRestore              = [scriptblock]::Create({ 
+        try {
+            DISM /Online /Cleanup-Image /ScanHealth 
+            DISM /Online /Cleanup-Image /RestoreHealth 
+            Show-MessageBox 'DISM Scan Completed' 
+        } catch {
+            Write-Host "Error executing DISM Restore: $_" -ForegroundColor Red
+        }
+    })
+    SFCRepair                = [scriptblock]::Create({ 
+        try {
+            sfc /scannow 
+            Show-MessageBox 'SFC Scan Completed' 
+        } catch {
+            Write-Host "Error executing SFC Repair: $_" -ForegroundColor Red
+        }
+    })
+    WindowsTroubleshooting   = [scriptblock]::Create({ 
+        try {
+            Write-Host "Executing Troubleshooting script" -ForegroundColor Cyan
+            Invoke-ScriptIfExists ".\Scripts\Troubleshooting.ps1"
+        } catch {
+            Write-Host "Error during Troubleshooting execution: $_" -ForegroundColor Red
+        }
+    })
+    SystemOptimisation       = [scriptblock]::Create({ 
+        try {
+            Write-Host "Executing System Optimisation" -ForegroundColor Cyan
+            Invoke-ScriptIfExists ".\Scripts\SystemOptimisation.ps1"
+        } catch {
+            Write-Host "Error during System Optimisation execution: $_" -ForegroundColor Red
+        }
+    })
+}
 
-#Form GUI for loading
- #Create Form to show selection of cleanup
-    $Form = New-Object System.Windows.Forms.Form
-    $form.Text = 'Windows Maintenance'
-    $form.Size = New-Object System.Drawing.Size(370,350)
-    $form.StartPosition = 'CenterScreen'
-    $objIcon = New-Object system.drawing.icon (".\Assets\windowslogo.ico")
-    $form.Icon = $objIcon
+# Validate script block assignment
+foreach ($key in $Scripts.Keys) {
+    if ($null -eq $Scripts[$key]) {
+        Write-Host "Error: Script block for $key is null." -ForegroundColor Red
+    } else {
+        Write-Host "Script block for $key is valid." -ForegroundColor Green
+    }
+}
 
-    $FormText = New-Object System.Windows.Forms.Label
-    $FormText.Location = New-Object System.Drawing.Point(35,10)
-    $FormText.Size = New-Object System.Drawing.Size(300,18)
-    $FormText.Text = 'Select Options Below, these do run in silent mode'
-#Cleanup Install button
-    $Cleanupinstallbutton = New-Object System.Windows.Forms.Button
-    $Cleanupinstallbutton.Location = New-Object System.Drawing.Size(35,35)
-    $Cleanupinstallbutton.Size = New-Object System.Drawing.Size(120,23)
-    $Cleanupinstallbutton.Text = "Fresh Install Cleanup"
-    $Cleanupinstallbutton.Add_Click($WindowsInstallCleanup)
-#Re-Install Default Apps button
-    $ReinstallDefaultAppsbutton = New-Object System.Windows.Forms.Button
-    $ReinstallDefaultAppsbutton.Location = New-Object System.Drawing.Size(165,35)
-    $ReinstallDefaultAppsbutton.Size = New-Object System.Drawing.Size(130,23)
-    $ReinstallDefaultAppsbutton.Text = "Reinstall Default Apps"
-    $ReinstallDefaultAppsbutton.Add_Click($ReinstallApps)
-#Uninstall OneDrive
-    $OneDriveUninstallbutton = New-Object System.Windows.Forms.Button
-    $OneDriveUninstallbutton.Location = New-Object System.Drawing.Size(35,65)
-    $OneDriveUninstallbutton.Size = New-Object System.Drawing.Size(120,23)
-    $OneDriveUninstallbutton.Text = "Uninstall OneDrive"
-    $OneDriveUninstallbutton.Add_Click($WindowsUninstallOneDrive)
-#Disk Cleanup Utility Button
-    $Diskcleanupbutton = New-Object System.Windows.Forms.Button
-    $Diskcleanupbutton.Location = New-Object System.Drawing.Size(35,95)
-    $Diskcleanupbutton.Size = New-Object System.Drawing.Size(120,23)
-    $Diskcleanupbutton.Text = "Disk Cleanup Silent"
-    $Diskcleanupbutton.Add_Click($WindowsDiskCleanup)
-#Delprof Cleanup Button
-    $Delprofbutton = New-Object System.Windows.Forms.Button
-    $Delprofbutton.Location = New-Object System.Drawing.Size(165,65)
-    $Delprofbutton.Size = New-Object System.Drawing.Size(130,23)
-    $Delprofbutton.Text = "Delete All user profiles"
-    $Delprofbutton.Add_Click($DelProf)
-#User Cleanup Utility
-    $usercleanupbutton = New-Object System.Windows.Forms.Button
-    $usercleanupbutton.Location = New-Object System.Drawing.Size(35,125)
-    $usercleanupbutton.Size = New-Object System.Drawing.Size(120,23)
-    $usercleanupbutton.Text = "User Cleanup"
-    $usercleanupbutton.Add_Click($Usercleanup)
-#DISM Restore
-    $Restorehealthbutton = New-Object System.Windows.Forms.Button
-    $Restorehealthbutton.Location = New-Object System.Drawing.Size(165,95)
-    $Restorehealthbutton.Size = New-Object System.Drawing.Size(130,23)
-    $Restorehealthbutton.Text = "DISM Restore Health"
-    $Restorehealthbutton.Add_Click($DISMRestore)
-#Defragmentation Utility
-    $Defragbutton = New-Object System.Windows.Forms.Button
-    $Defragbutton.Location = New-Object System.Drawing.Size(35,155)
-    $Defragbutton.Size = New-Object System.Drawing.Size(120,23)
-    $Defragbutton.Text = "Defrag"
-    $Defragbutton.Add_Click($Defrag)
-#Disk Check Utility
-    $DiskCheckbutton = New-Object System.Windows.Forms.Button
-    $DiskCheckbutton.Location = New-Object System.Drawing.Size(165,155)
-    $DiskCheckbutton.Size = New-Object System.Drawing.Size(130,23)
-    $DiskCheckbutton.Text = "Disk Check"
-    $DiskCheckbutton.Add_Click($DiskCheck)
-#System Repair Utility
-    $SFCRepairbutton = New-Object System.Windows.Forms.Button
-    $SFCRepairbutton.Location = New-Object System.Drawing.Size(165,125)
-    $SFCRepairbutton.Size = New-Object System.Drawing.Size(130,23)
-    $SFCRepairbutton.Text = "System Repair Scan"
-    $SFCRepairbutton.Add_Click($SFCRepair)
-#Troubleshooting Issues
-    $Troubleshootbutton = New-Object System.Windows.Forms.Button
-    $Troubleshootbutton.Location = New-Object System.Drawing.Size(35,185)
-    $Troubleshootbutton.Size = New-Object System.Drawing.Size(120,23)
-    $Troubleshootbutton.Text = "Troubleshooting"
-    $Troubleshootbutton.Add_Click($WindowsTroubleshooting)
-#Windows Optimisation
-    $OptimisationButton = New-Object System.Windows.Forms.Button
-    $OptimisationButton.Location = New-Object System.Drawing.Size(165,185)
-    $OptimisationButton.Size = New-Object System.Drawing.Size(130,23)
-    $OptimisationButton.Text = "System Optimisation"
-    $OptimisationButton.Add_Click($SystemOptimisation)
-#Custom Changes
-    #$Customchangesbutton = New-Object System.Windows.Forms.Button
-    #$Customchangesbutton.Location = New-Object System.Drawing.Size(165,155)
-    #$Customchangesbutton.Size = New-Object System.Drawing.Size(130,23)
-    #$Customchangesbutton.Text = "Custom Changes"
-    #$Customchangesbutton.Add_Click($CustomChanges)
-#Exit Button
-    $exitButton = New-Object System.Windows.Forms.Button
-    $exitButton.Location = New-Object System.Drawing.Point(135,270)
-    $exitButton.Size = New-Object System.Drawing.Size(75,23)
-    $exitButton.Text = 'Exit'
-    $exitButton.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
-    $form.CancelButton = $exitButton
-    $form.Controls.Add($exitButton)
-#Add buttons
-    $Form.Controls.Add($FormText)
-    $Form.Controls.Add($Cleanupinstallbutton)
-    $Form.Controls.Add($OneDriveUninstallbutton)
-    $Form.Controls.Add($ReinstallDefaultAppsbutton)
-    $Form.Controls.Add($Diskcleanupbutton)
-    $Form.Controls.Add($Delprofbutton)
-    $Form.Controls.Add($usercleanupbutton)
-    $Form.Controls.Add($Restorehealthbutton)
-    $Form.Controls.Add($Defragbutton)
-    $Form.Controls.Add($DiskCheckbutton)
-    $Form.Controls.Add($SFCRepairbutton)
-    $Form.Controls.Add($Troubleshootbutton)
-    $Form.Controls.Add($OptimisationButton)
-    #$Form.Controls.Add($Customchangesbutton)
-#Null command to stop console spam
-$Form.ShowDialog() > $null
-#Created By Chris Masters
+# Form Creation
+$Form = New-Object System.Windows.Forms.Form
+$Form.Text = 'Windows Maintenance'
+$Form.Size = New-Object System.Drawing.Size(370, 350)
+$Form.StartPosition = 'CenterScreen'
+$Form.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon(".\Assets\windowslogo.ico")
+
+# Label for instructions
+$FormText = New-Object System.Windows.Forms.Label
+$FormText.Location = New-Object System.Drawing.Point(35, 10)
+$FormText.Size = New-Object System.Drawing.Size(300, 18)
+$FormText.Text = 'Select Options Below, these run in silent mode'
+$Form.Controls.Add($FormText)
+
+# Create button function
+function Add-Button {
+    param (
+        [string]$Text,
+        [System.Drawing.Point]$Location,
+        [scriptblock]$Action
+    )
+
+    Write-Host "Adding button: $Text" -ForegroundColor Cyan
+    Write-Host "Action Type: $($Action.GetType().Name)" -ForegroundColor Yellow
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        Write-Host "Error: Button text is empty. Skipping this button." -ForegroundColor Red
+        return
+    }
+
+    if ($null -eq $Action -or -not ($Action -is [scriptblock])) {
+        Write-Host "Error: Invalid or missing action for button '$Text'" -ForegroundColor Red
+        return
+    }
+
+    $Button = New-Object System.Windows.Forms.Button
+    $Button.Text = $Text
+    $Button.Location = $Location
+    $Button.Size = New-Object System.Drawing.Size(120, 23)
+
+    $Button.Add_Click({
+        param ($sender, $eventArgs)
+
+        Write-Host "Button clicked: $($sender.Text)" -ForegroundColor Green
+
+        try {
+            if ($null -eq $Action) {
+                Write-Host "Error: Action is null for button '$($sender.Text)'" -ForegroundColor Red
+            } else {
+                Write-Host "Invoking action for button '$($sender.Text)'" -ForegroundColor Green
+                & $Action
+            }
+        } catch {
+            Write-Host "Error executing action for button '$($sender.Text)': $_" -ForegroundColor Red
+        }
+    })
+
+    $Form.Controls.Add($Button)
+}
+
+# Adding the buttons with script blocks as before
+Add-Button "Fresh Install Cleanup" (New-Object System.Drawing.Point(35, 35)) $Scripts.WindowsInstallCleanup
+Add-Button "Reinstall Default Apps" (New-Object System.Drawing.Point(165, 35)) $Scripts.ReinstallApps
+Add-Button "Uninstall OneDrive" (New-Object System.Drawing.Point(35, 65)) $Scripts.WindowsUninstallOneDrive
+Add-Button "Delete All User Profiles" (New-Object System.Drawing.Point(165, 65)) $Scripts.DelProf
+Add-Button "Windows Cleaner" (New-Object System.Drawing.Point(35, 125)) $Scripts.WindowsCleaner
+Add-Button "DISM Restore Health" (New-Object System.Drawing.Point(165, 95)) $Scripts.DISMRestore
+Add-Button "Defrag" (New-Object System.Drawing.Point(35, 155)) $Scripts.Defrag
+Add-Button "Disk Check" (New-Object System.Drawing.Point(165, 155)) $Scripts.DiskCheck
+Add-Button "System Repair Scan" (New-Object System.Drawing.Point(165, 125)) $Scripts.SFCRepair
+Add-Button "Troubleshooting" (New-Object System.Drawing.Point(35, 185)) $Scripts.WindowsTroubleshooting
+Add-Button "System Optimisation" (New-Object System.Drawing.Point(165, 185)) $Scripts.SystemOptimisation
+
+# Exit button
+$ExitButton = New-Object System.Windows.Forms.Button
+$ExitButton.Text = 'Exit'
+$ExitButton.Location = New-Object System.Drawing.Point(135, 270)
+$ExitButton.Size = New-Object System.Drawing.Size(75, 23)
+$ExitButton.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
+$Form.Controls.Add($ExitButton)
+$Form.CancelButton = $ExitButton
+
+# Show the form
+$Form.ShowDialog() | Out-Null
+# Created by Chris Masters
