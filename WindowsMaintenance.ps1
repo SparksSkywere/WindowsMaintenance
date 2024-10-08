@@ -33,7 +33,7 @@ function Show-MessageBox {
         [string]$Message,
         [string]$Title = 'Windows Maintenance'
     )
-    [System.Windows.MessageBox]::Show($Message, $Title, 'Ok', 'Information')
+    [System.Windows.Forms.MessageBox]::Show($Message, $Title, [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information)
 }
 
 # Check if the script file exists before executing
@@ -111,7 +111,7 @@ $Scripts = @{
     })
     DelProf                  = [scriptblock]::Create({ 
         try {
-            Start-Process -FilePath .\Scripts\Delprof.exe -ArgumentList "/u /q" -Wait
+            Start-Process -FilePath ".\Scripts\Delprof.exe" -ArgumentList "/u /q" -Wait
             Show-MessageBox 'Operation Completed' 
         } catch {
             Write-Host "Error executing DelProf: $_" -ForegroundColor Red
@@ -119,8 +119,8 @@ $Scripts = @{
     })
     DISMRestore              = [scriptblock]::Create({ 
         try {
-            DISM /Online /Cleanup-Image /ScanHealth 
-            DISM /Online /Cleanup-Image /RestoreHealth 
+            Start-Process -FilePath "DISM" -ArgumentList "/Online /Cleanup-Image /ScanHealth" -Wait
+            Start-Process -FilePath "DISM" -ArgumentList "/Online /Cleanup-Image /RestoreHealth" -Wait
             Show-MessageBox 'DISM Scan Completed' 
         } catch {
             Write-Host "Error executing DISM Restore: $_" -ForegroundColor Red
@@ -128,7 +128,7 @@ $Scripts = @{
     })
     SFCRepair                = [scriptblock]::Create({ 
         try {
-            sfc /scannow 
+            Start-Process -FilePath "sfc" -ArgumentList "/scannow" -Wait
             Show-MessageBox 'SFC Scan Completed' 
         } catch {
             Write-Host "Error executing SFC Repair: $_" -ForegroundColor Red
@@ -166,7 +166,7 @@ $Form = New-Object System.Windows.Forms.Form
 $Form.Text = 'Windows Maintenance'
 $Form.Size = New-Object System.Drawing.Size(370, 350)
 $Form.StartPosition = 'CenterScreen'
-$Form.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon(".\Assets\windowslogo.ico")
+$Form.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon((Get-Item ".\Assets\windowslogo.ico").FullName)
 
 # Label for instructions
 $FormText = New-Object System.Windows.Forms.Label
