@@ -1,3 +1,6 @@
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
 #Set Powershell Attribute
 Set-ExecutionPolicy Bypass -Force
 Clear-Host
@@ -49,21 +52,177 @@ function ExecutionCompleted () {
 #Functions to split lots of the work up into more readable bits / easier to configure
 #MaxReg
 function Maxpathreg () {Set-ItemProperty 'HKLM:\System\CurrentControlSet\Control\FileSystem' -Name 'LongPathsEnabled' -value 1}
-#Troubleshooting Internet
-function AdvFirewallReset () {netsh advfirewall reset}
-function netshipreset () {netsh int ip reset}
-function netshipresetipv6 () {netsh int ipv6 reset}
-function netwinsockreset () {netsh winsock reset}
-function flushdns () {IPconfig /flushdns}
-function iprelease () {IPconfig /release}
-function iprenew () {IPConfig /Renew}
-#Troubleshooting Windows Updates
-function netstopbits () {net stop bits}
-function netstopwuauserv () {net stop wuauserv}
-function netstopappidsvc () {net stop appidsvc}
-function netstopcryptsvc () {net stop cryptsvc}
-function DeleteSoftwareDistribution () {Get-ChildItem -Path '%systemroot%\SoftwareDistribution' * -Recurse | Remove-Item}
-function Deletecatroot2 () {Get-ChildItem -Path '%systemroot%\system32\catroot2' * -Recurse | Remove-Item}
+#Troubleshooting Internet - Modern Windows 10/11 methods
+function AdvFirewallReset () {
+    try {
+        netsh advfirewall reset
+        Write-Host "Advanced Firewall reset completed" -ForegroundColor Green
+    } catch {
+        Write-Warning "Failed to reset firewall: $_"
+    }
+}
+
+function netshipreset () {
+    try {
+        netsh int ip reset
+        Write-Host "IP stack reset completed" -ForegroundColor Green
+    } catch {
+        Write-Warning "Failed to reset IP stack: $_"
+    }
+}
+
+function netshipresetipv6 () {
+    try {
+        netsh int ipv6 reset
+        Write-Host "IPv6 stack reset completed" -ForegroundColor Green
+    } catch {
+        Write-Warning "Failed to reset IPv6 stack: $_"
+    }
+}
+
+function netwinsockreset () {
+    try {
+        netsh winsock reset
+        Write-Host "Winsock reset completed" -ForegroundColor Green
+    } catch {
+        Write-Warning "Failed to reset Winsock: $_"
+    }
+}
+
+function flushdns () {
+    try {
+        ipconfig /flushdns
+        Write-Host "DNS cache flushed" -ForegroundColor Green
+    } catch {
+        Write-Warning "Failed to flush DNS: $_"
+    }
+}
+
+function iprelease () {
+    try {
+        ipconfig /release
+        Write-Host "IP address released" -ForegroundColor Green
+    } catch {
+        Write-Warning "Failed to release IP: $_"
+    }
+}
+
+function iprenew () {
+    try {
+        ipconfig /renew
+        Write-Host "IP address renewed" -ForegroundColor Green
+    } catch {
+        Write-Warning "Failed to renew IP: $_"
+    }
+}
+
+function ResetNetworkAdapter () {
+    try {
+        Get-NetAdapter | Where-Object {$_.Status -eq "Up"} | Restart-NetAdapter
+        Write-Host "Network adapters restarted" -ForegroundColor Green
+    } catch {
+        Write-Warning "Failed to restart network adapters: $_"
+    }
+}
+#Troubleshooting Windows Updates - Modern Windows 10/11 methods
+function netstopbits () {
+    try {
+        Stop-Service -Name "bits" -Force -ErrorAction SilentlyContinue
+        Write-Host "BITS service stopped" -ForegroundColor Green
+    } catch {
+        Write-Warning "Failed to stop BITS: $_"
+    }
+}
+
+function netstopwuauserv () {
+    try {
+        Stop-Service -Name "wuauserv" -Force -ErrorAction SilentlyContinue
+        Write-Host "Windows Update service stopped" -ForegroundColor Green
+    } catch {
+        Write-Warning "Failed to stop Windows Update service: $_"
+    }
+}
+
+function netstopappidsvc () {
+    try {
+        Stop-Service -Name "appidsvc" -Force -ErrorAction SilentlyContinue
+        Write-Host "Application Identity service stopped" -ForegroundColor Green
+    } catch {
+        Write-Warning "Failed to stop Application Identity service: $_"
+    }
+}
+
+function netstopcryptsvc () {
+    try {
+        Stop-Service -Name "cryptsvc" -Force -ErrorAction SilentlyContinue
+        Write-Host "Cryptographic Services stopped" -ForegroundColor Green
+    } catch {
+        Write-Warning "Failed to stop Cryptographic Services: $_"
+    }
+}
+
+function DeleteSoftwareDistribution () {
+    try {
+        if (Test-Path "$env:SystemRoot\SoftwareDistribution") {
+            Remove-Item -Path "$env:SystemRoot\SoftwareDistribution\*" -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host "SoftwareDistribution folder cleared" -ForegroundColor Green
+        }
+    } catch {
+        Write-Warning "Failed to clear SoftwareDistribution: $_"
+    }
+}
+
+function Deletecatroot2 () {
+    try {
+        if (Test-Path "$env:SystemRoot\System32\catroot2") {
+            Remove-Item -Path "$env:SystemRoot\System32\catroot2\*" -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host "catroot2 folder cleared" -ForegroundColor Green
+        }
+    } catch {
+        Write-Warning "Failed to clear catroot2: $_"
+    }
+}
+
+function ResetWindowsUpdateComponents () {
+    Write-Host "Resetting Windows Update components..." -ForegroundColor Cyan
+    
+    # Stop services
+    netstopbits
+    netstopwuauserv
+    netstopappidsvc
+    netstopcryptsvc
+    
+    # Clear folders
+    DeleteSoftwareDistribution
+    Deletecatroot2
+    
+    # Re-register DLLs using modern method
+    $dlls = @(
+        "atl.dll", "urlmon.dll", "mshtml.dll", "shdocvw.dll", "browseui.dll",
+        "jscript.dll", "vbscript.dll", "scrrun.dll", "msxml.dll", "msxml3.dll",
+        "msxml6.dll", "actxprxy.dll", "softpub.dll", "wintrust.dll", "dssenh.dll",
+        "rsaenh.dll", "gpkcsp.dll", "sccbase.dll", "slbcsp.dll", "cryptdlg.dll",
+        "oleaut32.dll", "ole32.dll", "shell32.dll", "initpki.dll", "wuapi.dll",
+        "wuaueng.dll", "wuaueng1.dll", "wucltui.dll", "wups.dll", "wups2.dll",
+        "wuweb.dll", "qmgr.dll", "qmgrprxy.dll", "wucltux.dll", "muweb.dll", "wuwebv.dll"
+    )
+    
+    foreach ($dll in $dlls) {
+        try {
+            Start-Process -FilePath "regsvr32.exe" -ArgumentList "/s", $dll -Wait -ErrorAction SilentlyContinue
+        } catch {
+            Write-Warning "Failed to register $dll"
+        }
+    }
+    
+    # Restart services
+    netstartbits
+    netstartwuauserv
+    netstartappidsvc
+    netstartcryptsvc
+    
+    Write-Host "Windows Update components reset completed" -ForegroundColor Green
+}
 function associateatl () {regsvr32.exe /s atl.dll}
 function associateurlmon () {regsvr32.exe /s urlmon.dll}
 function associatemshtml () {regsvr32.exe /s mshtml.dll}
@@ -112,6 +271,41 @@ function lodctrsync () {lodctr /R | winmgmt.exe /RESYNCPERF}
 function trustedinstallerauto () {Get-Service -Name "trustedinstaller" | Set-Service -StartupType Automatic}
 function trustedinstallerstart () {net start trustedinstaller}
 function DISMRestore () {Dism /Online /Cleanup-Image /RestoreHealth | ExecutionCompleted}
+
+# Cache commands
+$troubleshootingCommands = @{
+    InternetReset = {
+        netsh advfirewall reset
+        netsh int ip reset
+        netsh winsock reset
+        ipconfig /flushdns
+        ipconfig /release
+        ipconfig /renew
+    }
+    WindowsUpdate = {
+        Stop-Service -Name bits, wuauserv, appidsvc, cryptsvc -Force
+        Remove-Item "$env:systemroot\SoftwareDistribution\*" -Recurse -Force
+        Remove-Item "$env:systemroot\system32\catroot2\*" -Recurse -Force
+        Start-Service -Name bits, wuauserv, appidsvc, cryptsvc
+    }
+    # ...other commands...
+}
+
+# Optimize command execution
+function Invoke-TroubleshootingCommand {
+    param([scriptblock]$Command)
+    
+    try {
+        $job = Start-Job -ScriptBlock $Command
+        while ($job.State -eq 'Running') {
+            Write-Progress -Activity "Running troubleshooting" -Status "Please wait..."
+            Start-Sleep -Milliseconds 500
+        }
+        Receive-Job $job
+    } catch {
+        Write-Warning "Command failed: $_"
+    }
+}
 
 #Commands for the buttons
     #$Commandname = {Command}

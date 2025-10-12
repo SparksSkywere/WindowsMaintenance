@@ -10,12 +10,13 @@ Quick Readme for the exe file not loading
 Make sure you are running administrator on the exe or .ps1 script
 
 1. (If you already set execution policy skip to step 2) Run the other .ps1 script that will set execution policy to "bypass" do not worry windows will automatically restore the execution policy when the computer is next turned on
-2. Then run the WindowsMaintenance.exe
+2. If you are getting an error about the Policy put in the following command with adminin privilages with Powershell: "Set-ExecutionPolicy Bypass -Force" (I have also added a seperate script that also does this command, you may run with admin on Powershell by navigating to the directory with: cd *"PATH"*)
+3. Then run the WindowsMaintenance.exe
 
 # What things this script does:
 
 Maintenance:
-1. Windows Install Cleanup (Standalone: https://github.com/SparksSkywere/Windows-10-Install-Cleaner)
+1. Windows Install Cleanup (Will detect W10/W11)
 2. Re-install Windows default Apps
 3. Uninstall One-Drive
 4. Disk Cleanup Utility
