@@ -30,17 +30,14 @@ function Show-Console
 show-console -hide
 
 #Functions
-function ExecutionCompleted () {
-    [System.Windows.MessageBox]::Show('Operation Completed','Windows Maintenance','Ok','Information')
-}
 
 #Cleanup commands and locations
-$Cleanup_CTemp = {Get-ChildItem -Path 'C:\Windows\Temp' * -Recurse | Remove-Item | ExecutionCompleted}
-$Cleanup_Prefetch = {Get-ChildItem -Path 'C:\Windows\Prefetch' * -Recurse | Remove-Item | ExecutionCompleted}
-$Cleanup_DSLocal = {Get-ChildItem -Path 'C:\Documents and Settings\*\Local Settings\temp\' * -Recurse | Remove-Item | ExecutionCompleted}
-$Cleanup_Appdata = {Get-ChildItem -Path 'C:\Users\*\Appdata\Local\Temp\' * -Recurse | Remove-Item | ExecutionCompleted}
-$CleanupSystem = {CleanupSystem | ExecutionCompleted}
-$DoAll = {Get-ChildItem -Path 'C:\Windows\Temp' * -Recurse | Remove-Item | Get-ChildItem -Path 'C:\Windows\Prefetch' * -Recurse | Remove-Item | Get-ChildItem -Path 'C:\Documents and Settings\*\Local Settings\temp\' * -Recurse | Remove-Item | Get-ChildItem -Path 'C:\Users\*\Appdata\Local\Temp\' * -Recurse | Remove-Item | CleanupSystem |ExecutionCompleted}
+$Cleanup_CTemp = {Get-ChildItem -Path 'C:\Windows\Temp' * -Recurse | Remove-Item}
+$Cleanup_Prefetch = {Get-ChildItem -Path 'C:\Windows\Prefetch' * -Recurse | Remove-Item}
+$Cleanup_DSLocal = {Get-ChildItem -Path 'C:\Documents and Settings\*\Local Settings\temp\' * -Recurse | Remove-Item}
+$Cleanup_Appdata = {Get-ChildItem -Path 'C:\Users\*\Appdata\Local\Temp\' * -Recurse | Remove-Item}
+$CleanupSystem = {CleanupSystem}
+$DoAll = {Get-ChildItem -Path 'C:\Windows\Temp' * -Recurse | Remove-Item; Get-ChildItem -Path 'C:\Windows\Prefetch' * -Recurse | Remove-Item; Get-ChildItem -Path 'C:\Documents and Settings\*\Local Settings\temp\' * -Recurse | Remove-Item; Get-ChildItem -Path 'C:\Users\*\Appdata\Local\Temp\' * -Recurse | Remove-Item; CleanupSystem}
 
 function CleanupSystem () {
 # Declare variables for the folders we want to clean up

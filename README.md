@@ -6,12 +6,12 @@ You may also take the scripts and use them in your own programs under the GNU Li
 
 # Readme.txt
 
-Quick Readme for the exe file not loading
-Make sure you are running administrator on the exe or .ps1 script
+Quick Readme for running the script
+Make sure you are running as administrator.
 
 1. (If you already set execution policy skip to step 2) Run the other .ps1 script that will set execution policy to "bypass" do not worry windows will automatically restore the execution policy when the computer is next turned on
-2. If you are getting an error about the Policy put in the following command with adminin privilages with Powershell: "Set-ExecutionPolicy Bypass -Force" (I have also added a seperate script that also does this command, you may run with admin on Powershell by navigating to the directory with: cd *"PATH"*)
-3. Then run the WindowsMaintenance.exe
+2. If you are getting an error about the Policy put in the following command with admin privileges with Powershell: "Set-ExecutionPolicy Bypass -Force" (I have also added a seperate script that also does this command, you may run with admin on Powershell by navigating to the directory with: cd *"PATH"*)
+3. Double-click `RunMaintenance.bat` to launch the tool easily, or run `WindowsMaintenance.ps1` directly in PowerShell as Administrator.
 
 # What things this script does:
 
@@ -38,6 +38,9 @@ TroubleShooting:
 # Custom Script
 
 In the folder under Scripts is a file called "CustomChanges.ps1", this is for custom additions, it is an example of an older version of the troubleshooting file, you can freely edit this file for use in custom environments / testing of custom code, the panel will need to be added into the main ps1 script otherwise it will not show.
+
+# Easy Launcher
+For users unfamiliar with PowerShell, use `RunMaintenance.bat` to launch the tool. It handles elevation and execution policy automatically. See `Launcher_README.md` for details.
 
 # Extra Credit
 

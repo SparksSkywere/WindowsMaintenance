@@ -94,8 +94,6 @@ function ExecutionCompleted {
     if ($Global:MainProgressForm) {
         Show-Progress "System optimization completed successfully!" 100
         Start-Sleep -Seconds 2
-    } else {
-        [System.Windows.MessageBox]::Show('System Optimization Completed Successfully', 'Windows Maintenance', 'Ok', 'Information')
     }
 }
 

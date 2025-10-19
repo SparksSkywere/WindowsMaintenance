@@ -27,13 +27,5 @@ if (-not $isAdmin) {
     Write-Host "  Note: Some functions require administrator privileges" -ForegroundColor Yellow
 }
 
-# Show success message
-[System.Windows.MessageBox]::Show(
-    "Test completed successfully!`n`nOS: $($osInfo.Caption)`nBuild: $($osInfo.BuildNumber)`nAdmin: $isAdmin`nExecution Policy: $executionPolicy", 
-    'Windows Maintenance - Test Results', 
-    'OK', 
-    'Information'
-)
-
 Exit
 #Created by Chris Masters - Updated for Windows 10/11 compatibility

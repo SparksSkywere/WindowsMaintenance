@@ -36,11 +36,6 @@ function Show-Console
 #To show the console change "-hide" to "-show"
 show-console -hide
 
-# Cache drive information at startup
-$driveCache = Get-PSDrive -PSProvider FileSystem | 
-    Where-Object { $_.Free -gt 0 -and $_.Used -gt 0 } |
-    Select-Object Name, Root, @{N='Type';E={(Get-PhysicalDisk | Where-Object DeviceId -eq $_.Root.TrimEnd('\'))).MediaType}}
-
 # Modern defrag function with SSD detection for Windows 10/11
 function Start-OptimizedDefrag {
     param([string]$DriveLetter)
@@ -81,7 +76,7 @@ function Start-OptimizedDefrag {
         Write-Host "Traditional HDD detected. Starting defragmentation..." -ForegroundColor Green
         
         # Check fragmentation level first
-        $analysis = Optimize-Volume -DriveLetter $DriveLetter -Analyze -Verbose
+        $null = Optimize-Volume -DriveLetter $DriveLetter -Analyze -Verbose
         
         # Show progress dialog
         $progressForm = New-Object System.Windows.Forms.Form
@@ -121,7 +116,7 @@ function Start-OptimizedDefrag {
             [System.Windows.Forms.Application]::DoEvents()
         }
         
-        $result = Receive-Job $job
+        $null = Receive-Job $job
         Remove-Job $job
         
         $progressForm.Close()
@@ -139,12 +134,9 @@ function Start-OptimizedDefrag {
 }
 
 #Functions
-function ExecutionCompleted () {
-    [System.Windows.MessageBox]::Show('Defragmentation Completed','Windows Troubleshooting','Ok','Information')
-}
 
 #Create form containing all the buttons to the commands set above
-[System.Windows.MessageBox]::Show('When you select a drive the defrag will run in the background, check task manager for disk usage. DO NOT USE THIS PROGRAM FOR SSD!','Windows Quick Defrag','Ok','Warning') | Out-Null
+[System.Windows.Forms.MessageBox]::Show('When you select a drive the defrag will run in the background, check task manager for disk usage. DO NOT USE THIS PROGRAM FOR SSD!','Windows Quick Defrag','Ok','Warning') | Out-Null
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Windows Quick Defrag'
 $form.StartPosition = 'CenterScreen'
@@ -161,7 +153,7 @@ $form.Controls.Add($listBox)
 #Execute code when selecting a drive
 $listBox.Add_SelectedIndexChanged({
     $SelectedDrive = $listBox.SelectedItem
-    Start-OptimizedDefrag -DriveLetter $SelectedDrive | ExecutionCompleted
+    Start-OptimizedDefrag -DriveLetter $SelectedDrive
 })
 
 #Get Connected drives information + sort via name

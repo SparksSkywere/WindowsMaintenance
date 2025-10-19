@@ -16,7 +16,6 @@ param (
     [switch]$settingsonly
     )
 
-[System.Windows.MessageBox]::Show('Windows App removal, click Ok to close','Windows Install Cleaner','Ok','Information')
 #Applications in a list using package names, feel free to add custom names
 $ProvisionedAppPackageNames = @(
     "Microsoft.BingFinance"
@@ -92,14 +91,15 @@ foreach ($ProvisionedAppName in $ProvisionedAppPackageNames) {
             }
         }
         
-        # Remove provisioned packages (prevents installation for new users)
-        $provisionedApps = Get-AppXProvisionedPackage -Online | Where-Object DisplayName -Like "*$ProvisionedAppName*"
-        if ($provisionedApps) {
-            foreach ($app in $provisionedApps) {
-                Write-Host "Removing provisioned package: $($app.DisplayName)..." -ForegroundColor Cyan
-                Remove-AppxProvisionedPackage -Online -PackageName $app.PackageName -ErrorAction SilentlyContinue
-            }
-        }
+        # NOTE: Provisioned packages are NOT removed to allow reinstallation via "Reinstall Default Apps" button
+        # If you want to permanently remove apps from the system image, uncomment the lines below:
+        # $provisionedApps = Get-AppXProvisionedPackage -Online | Where-Object DisplayName -Like "*$ProvisionedAppName*"
+        # if ($provisionedApps) {
+        #     foreach ($app in $provisionedApps) {
+        #         Write-Host "Removing provisioned package: $($app.DisplayName)..." -ForegroundColor Cyan
+        #         Remove-AppxProvisionedPackage -Online -PackageName $app.PackageName -ErrorAction SilentlyContinue
+        #     }
+        # }
         
     } catch {
         Write-Warning "Failed to process $ProvisionedAppName`: $_"
@@ -195,6 +195,5 @@ If ($appsonly) {
             DisService
 }
 }
-[System.Windows.MessageBox]::Show('Operation Completed','Windows Troubleshooting','Ok','Information')
 Exit
 #Created By Chris Masters

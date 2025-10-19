@@ -41,11 +41,7 @@ show-console -hide
 
 #Functions
 function RestartNeeded () {
-    [System.Windows.MessageBox]::Show('Please restart the computer','Windows Troubleshooting','Ok','Information')
-}
-
-function ExecutionCompleted () {
-    [System.Windows.MessageBox]::Show('Operation Completed','Windows Troubleshooting','Ok','Information')
+    [System.Windows.Forms.MessageBox]::Show('Please restart the computer','Windows Troubleshooting','Ok','Information')
 }
 
 #$scriptPath = split-path -parent $MyInvocation.MyCommand.Definition

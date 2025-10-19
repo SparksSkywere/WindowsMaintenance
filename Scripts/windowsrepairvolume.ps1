@@ -37,9 +37,6 @@ function Show-Console
 show-console -hide
 
 #Functions
-function ExecutionCompleted () {
-    [System.Windows.MessageBox]::Show('Volume Scan and Repair Completed','Windows Maintenance','Ok','Information')
-}
 
 # Modern volume repair function for Windows 10/11
 function Start-VolumeRepair {
@@ -179,8 +176,6 @@ function Start-VolumeRepair {
         $progressForm.Close()
         $progressForm.Dispose()
         
-        ExecutionCompleted
-        
     } catch {
         Write-Warning "Volume repair failed for drive $DriveLetter : $_"
         if ($progressForm) {
@@ -191,7 +186,7 @@ function Start-VolumeRepair {
 }
 
 #Create form containing all the buttons to the commands set above
-[System.Windows.MessageBox]::Show('When you select a drive the Scanning will run in the background or ask to reboot (If system drive has been selected), check task manager for disk usage if your worried it is not doing anything','Windows Volume Check','Ok','Warning') | Out-Null
+[System.Windows.Forms.MessageBox]::Show('When you select a drive the Scanning will run in the background or ask to reboot (If system drive has been selected), check task manager for disk usage if your worried it is not doing anything','Windows Volume Check','Ok','Warning') | Out-Null
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Windows Volume Check'
 $form.StartPosition = 'CenterScreen'
@@ -208,7 +203,7 @@ $form.Controls.Add($listBox)
 #Execute code when selecting a drive
 $listBox.Add_SelectedIndexChanged({
     $SelectedDrive = $listBox.SelectedItem
-    Start-VolumeRepair -DriveLetter $SelectedDrive | ExecutionCompleted
+    Start-VolumeRepair -DriveLetter $SelectedDrive
 })
 
 #Get Connected drives information + sort via name

@@ -51,13 +51,10 @@ if ($AutomatedMode) {
 show-console -hide
 
 #Functions
-function ExecutionCompleted () {
-    [System.Windows.MessageBox]::Show('Operation Completed','Windows Maintenance','Ok','Information')
-}
 
 #Cleanup commands and locations
-$UserCleaner = {Invoke-Cleanup -Path $cleanupPaths.WinTemp; Invoke-Cleanup -Path $cleanupPaths.Prefetch; Invoke-Cleanup -Path $cleanupPaths.LocalTemp; ExecutionCompleted}
-$CleanupSystem = {CleanupSystem | ExecutionCompleted}
+$UserCleaner = {Invoke-Cleanup -Path $cleanupPaths.WinTemp; Invoke-Cleanup -Path $cleanupPaths.Prefetch; Invoke-Cleanup -Path $cleanupPaths.LocalTemp}
+$CleanupSystem = {CleanupSystem}
 
 # To do:
 # Replace the above with just a scanner and cleaner like ccleaner, GUI?

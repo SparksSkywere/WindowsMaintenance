@@ -1,3 +1,36 @@
+# Windows Maintenance Tool - Requires Administrator Privileges
+# Auto-elevate if not running as administrator
+
+# Check if running as administrator
+$currentPrincipal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+$isAdmin = $currentPrincipal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+if (-not $isAdmin) {
+    Write-Host "Windows Maintenance Tool requires Administrator privileges." -ForegroundColor Yellow
+    Write-Host "Requesting elevation..." -ForegroundColor Cyan
+    
+    # Get the full path to the script
+    $scriptPath = $MyInvocation.MyCommand.Path
+    
+    # Prepare arguments
+    $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
+    if ($args) {
+        $arguments += " " + ($args -join " ")
+    }
+    
+    try {
+        # Start new elevated process
+        Start-Process powershell.exe -ArgumentList $arguments -Verb RunAs
+        exit
+    } catch {
+        Write-Host "Failed to elevate privileges. Please run as Administrator manually." -ForegroundColor Red
+        Read-Host "Press Enter to exit"
+        exit 1
+    }
+}
+
+Write-Host "Running with Administrator privileges" -ForegroundColor Green
+
 # Set script to use strict mode with enhanced error handling
 Set-StrictMode -Version Latest
 $ProgressPreference = 'Continue'  # Show progress bars
@@ -58,16 +91,16 @@ $Global:MainProgressLabel = $null
 $Global:CurrentOperation = ""
 
 # Cache script paths at startup
+$ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $scriptPaths = @{
-    InstallCleaner = ".\Scripts\Windows{0}InstallCleaner.ps1"
-    OneDrive = ".\Scripts\Uninstallonedrive.ps1"
-    Cleaner = ".\Scripts\WindowsCleaner.ps1"
-    Defrag = ".\Scripts\windowsdefrag.ps1"
-    DiskCheck = ".\Scripts\windowsrepairvolume.ps1"
-    Troubleshooting = ".\Scripts\Troubleshooting.ps1"
-    SystemOptimisation = ".\Scripts\SystemOptimisation.ps1"
-    AutoMaintenance = ".\Scripts\AutoMaintenance.ps1"
-    ScheduledTasks = ".\Scripts\ScheduledMaintenance.ps1"
+    InstallCleaner = Join-Path $ScriptRoot "Scripts\Windows{0}InstallCleaner.ps1"
+    OneDrive = Join-Path $ScriptRoot "Scripts\Uninstallonedrive.ps1"
+    Cleaner = Join-Path $ScriptRoot "Scripts\WindowsCleaner.ps1"
+    Defrag = Join-Path $ScriptRoot "Scripts\windowsdefrag.ps1"
+    DiskCheck = Join-Path $ScriptRoot "Scripts\windowsrepairvolume.ps1"
+    Troubleshooting = Join-Path $ScriptRoot "Scripts\troubleshooting.ps1"
+    SystemOptimisation = Join-Path $ScriptRoot "Scripts\SystemOptimisation.ps1"
+    Delprof2 = Join-Path $ScriptRoot "Scripts\Delprof2.exe"
 }
 
 Clear-Host
@@ -200,9 +233,16 @@ function Invoke-ScriptWithProgress {
             # Execute external script
             Show-ProgressDialog -Status "Running $DisplayName script..." -Indeterminate
             
+            # Convert relative path to absolute path
+            $absoluteScriptPath = Resolve-Path $ScriptPath
+            
             $job = Start-Job -ScriptBlock {
                 param($path, $scriptArgs)
                 try {
+                    # Load required assemblies in the job
+                    Add-Type -AssemblyName "System.Windows.Forms" -ErrorAction SilentlyContinue
+                    Add-Type -AssemblyName "System.Drawing" -ErrorAction SilentlyContinue
+                    
                     if ($scriptArgs) {
                         & $path @scriptArgs
                     } else {
@@ -213,7 +253,7 @@ function Invoke-ScriptWithProgress {
                     Write-Error $_.Exception.Message
                     return $false
                 }
-            } -ArgumentList $ScriptPath, $ArgumentList
+            } -ArgumentList $absoluteScriptPath, $ArgumentList
             
             # Monitor job progress
             $timeout = 300  # 5 minutes timeout
@@ -354,12 +394,10 @@ try {
     switch ($osVersion) {
         "10" {
             Write-Host "Configured for Windows 10" -ForegroundColor Green
-            $installCleanerScript = ".\Scripts\Windows10InstallCleaner.ps1"
             if ($DebugMode) { Write-DebugMessage "Configured for Windows 10" "INFO" }
         }
         "11" {
             Write-Host "Configured for Windows 11" -ForegroundColor Green
-            $installCleanerScript = ".\Scripts\Windows11InstallCleaner.ps1"
             if ($DebugMode) { Write-DebugMessage "Configured for Windows 11" "INFO" }
         }
         default {
@@ -401,70 +439,561 @@ try {
 # Enhanced script blocks with detailed progress tracking and better error handling
 $Scripts = @{
     WindowsInstallCleanup = [scriptblock]::Create({ 
-        Invoke-ScriptWithProgress -ScriptPath $installCleanerScript -DisplayName "Windows Install Cleanup"
+        Invoke-ScriptWithProgress -DisplayName "Windows Install Cleanup" -ScriptBlock {
+            Show-ProgressDialog -Status "Scanning installed Windows apps..." -Indeterminate
+            
+            # Get all installed AppX packages for the current user
+            Write-Host "Scanning installed Windows apps..." -ForegroundColor Cyan
+            $installedApps = Get-AppxPackage -ErrorAction SilentlyContinue | Where-Object { 
+                $_.Name -notlike "Microsoft.Windows.ShellExperienceHost" -and
+                $_.Name -notlike "Microsoft.Windows.Cortana" -and
+                $_.Name -notlike "Microsoft.WindowsStore"
+            } | Sort-Object -Property Name
+            
+            if (-not $installedApps -or $installedApps.Count -eq 0) {
+                Show-ProgressDialog -Status "No removable apps found" -PercentComplete 100
+                Write-Host "No removable Windows apps found" -ForegroundColor Yellow
+                [System.Windows.Forms.MessageBox]::Show(
+                    "No removable Windows apps found on this system.",
+                    'Remove Apps',
+                    'OK',
+                    'Information'
+                )
+                return
+            }
+            
+            # Create selection dialog
+            Show-ProgressDialog -Status "Building app selection dialog..." -Indeterminate
+            
+            $selectionForm = New-Object System.Windows.Forms.Form
+            $selectionForm.Text = "Select Apps to Remove"
+            $selectionForm.Size = New-Object System.Drawing.Size(700, 700)
+            $selectionForm.StartPosition = "CenterScreen"
+            $selectionForm.FormBorderStyle = "FixedDialog"
+            $selectionForm.MaximizeBox = $false
+            $selectionForm.MinimizeBox = $false
+            $selectionForm.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+            $selectionForm.TopMost = $true
+            
+            # Header label
+            $headerLabel = New-Object System.Windows.Forms.Label
+            $headerLabel.Location = New-Object System.Drawing.Point(10, 10)
+            $headerLabel.Size = New-Object System.Drawing.Size(660, 40)
+            $headerLabel.Text = "Select the apps you want to REMOVE from your system. Essential system apps are not shown."
+            $headerLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+            $headerLabel.ForeColor = [System.Drawing.Color]::DarkRed
+            $selectionForm.Controls.Add($headerLabel)
+            
+            # Select All / Deselect All buttons
+            $selectAllBtn = New-Object System.Windows.Forms.Button
+            $selectAllBtn.Location = New-Object System.Drawing.Point(10, 55)
+            $selectAllBtn.Size = New-Object System.Drawing.Size(100, 30)
+            $selectAllBtn.Text = "Select All"
+            $selectionForm.Controls.Add($selectAllBtn)
+            
+            $deselectAllBtn = New-Object System.Windows.Forms.Button
+            $deselectAllBtn.Location = New-Object System.Drawing.Point(120, 55)
+            $deselectAllBtn.Size = New-Object System.Drawing.Size(100, 30)
+            $deselectAllBtn.Text = "Deselect All"
+            $selectionForm.Controls.Add($deselectAllBtn)
+            
+            # Search box
+            $searchLabel = New-Object System.Windows.Forms.Label
+            $searchLabel.Location = New-Object System.Drawing.Point(450, 60)
+            $searchLabel.Size = New-Object System.Drawing.Size(50, 20)
+            $searchLabel.Text = "Search:"
+            $selectionForm.Controls.Add($searchLabel)
+            
+            $searchBox = New-Object System.Windows.Forms.TextBox
+            $searchBox.Location = New-Object System.Drawing.Point(500, 57)
+            $searchBox.Size = New-Object System.Drawing.Size(180, 25)
+            $selectionForm.Controls.Add($searchBox)
+            
+            # CheckedListBox for apps
+            $checkedListBox = New-Object System.Windows.Forms.CheckedListBox
+            $checkedListBox.Location = New-Object System.Drawing.Point(10, 95)
+            $checkedListBox.Size = New-Object System.Drawing.Size(660, 480)
+            $checkedListBox.CheckOnClick = $true
+            $selectionForm.Controls.Add($checkedListBox)
+            
+            # Add apps to the list
+            $allApps = @()
+            foreach ($app in $installedApps) {
+                $appInfo = @{
+                    DisplayText = "$($app.Name) - v$($app.Version)"
+                    App = $app
+                }
+                $allApps += $appInfo
+                [void]$checkedListBox.Items.Add($appInfo.DisplayText, $false)  # Unchecked by default for safety
+            }
+            
+            # Select All button click event
+            $selectAllBtn.Add_Click({
+                for ($i = 0; $i -lt $checkedListBox.Items.Count; $i++) {
+                    $checkedListBox.SetItemChecked($i, $true)
+                }
+            })
+            
+            # Deselect All button click event
+            $deselectAllBtn.Add_Click({
+                for ($i = 0; $i -lt $checkedListBox.Items.Count; $i++) {
+                    $checkedListBox.SetItemChecked($i, $false)
+                }
+            })
+            
+            # Search box text changed event
+            $searchBox.Add_TextChanged({
+                $searchText = $searchBox.Text.ToLower()
+                $checkedListBox.Items.Clear()
+                
+                foreach ($appInfo in $allApps) {
+                    if ([string]::IsNullOrWhiteSpace($searchText) -or $appInfo.DisplayText.ToLower().Contains($searchText)) {
+                        [void]$checkedListBox.Items.Add($appInfo.DisplayText, $false)
+                    }
+                }
+            })
+            
+            # Info label
+            $infoLabel = New-Object System.Windows.Forms.Label
+            $infoLabel.Location = New-Object System.Drawing.Point(10, 585)
+            $infoLabel.Size = New-Object System.Drawing.Size(660, 20)
+            $infoLabel.Text = "Found $($installedApps.Count) removable apps installed"
+            $infoLabel.ForeColor = [System.Drawing.Color]::Gray
+            $selectionForm.Controls.Add($infoLabel)
+            
+            # Warning label
+            $warningLabel = New-Object System.Windows.Forms.Label
+            $warningLabel.Location = New-Object System.Drawing.Point(10, 605)
+            $warningLabel.Size = New-Object System.Drawing.Size(660, 20)
+            $warningLabel.Text = "⚠ WARNING: Removed apps can be reinstalled using 'Reinstall Default Apps' button"
+            $warningLabel.ForeColor = [System.Drawing.Color]::OrangeRed
+            $warningLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Bold)
+            $selectionForm.Controls.Add($warningLabel)
+            
+            # Remove button
+            $removeBtn = New-Object System.Windows.Forms.Button
+            $removeBtn.Location = New-Object System.Drawing.Point(470, 630)
+            $removeBtn.Size = New-Object System.Drawing.Size(100, 35)
+            $removeBtn.Text = "Remove"
+            $removeBtn.BackColor = [System.Drawing.Color]::IndianRed
+            $removeBtn.ForeColor = [System.Drawing.Color]::White
+            $removeBtn.DialogResult = [System.Windows.Forms.DialogResult]::OK
+            $selectionForm.Controls.Add($removeBtn)
+            $selectionForm.AcceptButton = $removeBtn
+            
+            # Cancel button
+            $cancelBtn = New-Object System.Windows.Forms.Button
+            $cancelBtn.Location = New-Object System.Drawing.Point(580, 630)
+            $cancelBtn.Size = New-Object System.Drawing.Size(100, 35)
+            $cancelBtn.Text = "Cancel"
+            $cancelBtn.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
+            $selectionForm.Controls.Add($cancelBtn)
+            $selectionForm.CancelButton = $cancelBtn
+            
+            # Show the selection dialog (modal dialog will be on top)
+            $dialogResult = $selectionForm.ShowDialog()
+            
+            if ($dialogResult -ne [System.Windows.Forms.DialogResult]::OK) {
+                Show-ProgressDialog -Status "App removal cancelled by user" -PercentComplete 0
+                Write-Host "App removal cancelled by user" -ForegroundColor Yellow
+                Start-Sleep -Seconds 2
+                return
+            }
+            
+            # Get selected apps
+            $selectedApps = @()
+            for ($i = 0; $i -lt $checkedListBox.Items.Count; $i++) {
+                if ($checkedListBox.GetItemChecked($i)) {
+                    $displayText = $checkedListBox.Items[$i]
+                    $appInfo = $allApps | Where-Object { $_.DisplayText -eq $displayText }
+                    if ($appInfo) {
+                        $selectedApps += $appInfo.App
+                    }
+                }
+            }
+            
+            if ($selectedApps.Count -eq 0) {
+                Show-ProgressDialog -Status "No apps selected for removal" -PercentComplete 0
+                Write-Host "No apps selected for removal" -ForegroundColor Yellow
+                Start-Sleep -Seconds 2
+                return
+            }
+            
+            # Confirm removal
+            $confirmResult = [System.Windows.Forms.MessageBox]::Show(
+                "Are you sure you want to remove $($selectedApps.Count) apps?`n`nThey can be reinstalled later using the 'Reinstall Default Apps' button.",
+                'Confirm App Removal',
+                'YesNo',
+                'Warning'
+            )
+            
+            if ($confirmResult -ne [System.Windows.Forms.DialogResult]::Yes) {
+                Show-ProgressDialog -Status "App removal cancelled" -PercentComplete 0
+                Write-Host "App removal cancelled" -ForegroundColor Yellow
+                Start-Sleep -Seconds 2
+                return
+            }
+            
+            # Remove selected apps
+            $totalApps = $selectedApps.Count
+            $processedApps = 0
+            $successCount = 0
+            $failedCount = 0
+            
+            Write-Host "`nRemoving $totalApps selected apps..." -ForegroundColor Cyan
+            
+            foreach ($app in $selectedApps) {
+                $processedApps++
+                $percentComplete = [Math]::Round(($processedApps / $totalApps) * 100)
+                
+                try {
+                    Show-ProgressDialog -Status "Removing: $($app.Name) ($processedApps/$totalApps)" -PercentComplete $percentComplete
+                    
+                    Remove-AppxPackage -Package $app.PackageFullName -ErrorAction Stop
+                    
+                    $successCount++
+                    Write-Host "  [OK] Removed: $($app.Name)" -ForegroundColor Green
+                } catch {
+                    $failedCount++
+                    Write-Host "  [FAIL] Failed to remove: $($app.Name) - $($_.Exception.Message)" -ForegroundColor Red
+                }
+            }
+            
+            Write-Host "`nRemoval Summary:" -ForegroundColor Cyan
+            Write-Host "  Total processed: $totalApps" -ForegroundColor White
+            Write-Host "  Successfully removed: $successCount" -ForegroundColor Green
+            Write-Host "  Failed: $failedCount" -ForegroundColor Red
+            
+            Show-ProgressDialog -Status "Completed! $successCount removed, $failedCount failed" -PercentComplete 100
+            Start-Sleep -Seconds 3
+        }
     })
     
-    WindowsUninstallOneDrive = [scriptblock]::Create({ 
-        Invoke-ScriptWithProgress -ScriptPath ".\Scripts\Uninstallonedrive.ps1" -DisplayName "OneDrive Uninstaller"
-    })
+    WindowsUninstallOneDrive = [scriptblock]::Create("Invoke-ScriptWithProgress -ScriptPath '$($scriptPaths.OneDrive)' -DisplayName 'OneDrive Uninstaller'")
     
-    WindowsCleaner = [scriptblock]::Create({ 
-        Invoke-ScriptWithProgress -ScriptPath ".\Scripts\WindowsCleaner.ps1" -DisplayName "Windows System Cleaner" -ArgumentList "--automated"
-    })
+    WindowsCleaner = [scriptblock]::Create("Invoke-ScriptWithProgress -ScriptPath '$($scriptPaths.Cleaner)' -DisplayName 'Windows System Cleaner' -ArgumentList '--automated'")
     
-    Defrag = [scriptblock]::Create({ 
-        Invoke-ScriptWithProgress -ScriptPath ".\Scripts\windowsdefrag.ps1" -DisplayName "Disk Defragmentation"
-    })
+    Defrag = [scriptblock]::Create("Invoke-ScriptWithProgress -ScriptPath '$($scriptPaths.Defrag)' -DisplayName 'Disk Defragmentation'")
     
-    DiskCheck = [scriptblock]::Create({ 
-        Invoke-ScriptWithProgress -ScriptPath ".\Scripts\windowsrepairvolume.ps1" -DisplayName "Disk Check and Repair"
-    })
+    DiskCheck = [scriptblock]::Create("Invoke-ScriptWithProgress -ScriptPath '$($scriptPaths.DiskCheck)' -DisplayName 'Disk Check and Repair'")
     
     ReinstallApps = [scriptblock]::Create({ 
         Invoke-ScriptWithProgress -DisplayName "Reinstall Default Apps" -ScriptBlock {
-            Show-ProgressDialog -Status "Scanning for Windows apps..." -Indeterminate
+            Show-ProgressDialog -Status "Scanning for available Windows apps..." -Indeterminate
             
-            $apps = Get-AppXPackage -AllUsers -ErrorAction SilentlyContinue
-            $totalApps = $apps.Count
-            $processedApps = 0
+            # Get currently installed apps for the current user
+            Write-Host "Checking currently installed apps..." -ForegroundColor Cyan
+            $installedApps = Get-AppxPackage -ErrorAction SilentlyContinue
+            $installedAppNames = $installedApps | ForEach-Object { $_.Name }
             
-            if ($totalApps -gt 0) {
-                foreach ($app in $apps) {
-                    try {
-                        $processedApps++
-                        $percentComplete = [Math]::Round(($processedApps / $totalApps) * 100)
-                        Show-ProgressDialog -Status "Reinstalling: $($app.Name)" -PercentComplete $percentComplete
-                        
-                        Add-AppxPackage -DisableDevelopmentMode -Register "$($app.InstallLocation)\AppXManifest.xml" -ErrorAction SilentlyContinue
-                    } catch {
-                        Write-Warning "Failed to reinstall $($app.Name): $_"
-                    }
-                }
-                Show-ProgressDialog -Status "App reinstallation completed!" -PercentComplete 100
-            } else {
-                Show-ProgressDialog -Status "No apps found to reinstall" -PercentComplete 100
+            # Get all provisioned packages still in the system image
+            Write-Host "Scanning provisioned packages in Windows image..." -ForegroundColor Cyan
+            $provisionedPackages = Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
+            
+            if (-not $provisionedPackages) {
+                Show-ProgressDialog -Status "No provisioned packages found to reinstall" -PercentComplete 100
+                Write-Host "No provisioned packages found in the Windows image" -ForegroundColor Yellow
+                Write-Host "Apps may have been permanently removed by the cleanup script" -ForegroundColor Yellow
+                Start-Sleep -Seconds 3
+                return
             }
             
-            Start-Sleep -Seconds 2
+            # Find apps that are provisioned but NOT currently installed
+            $appsToInstall = $provisionedPackages | Where-Object { 
+                $provisionedName = $_.DisplayName
+                # Check if this provisioned app is NOT in the installed apps list
+                -not ($installedAppNames | Where-Object { $_ -eq $provisionedName })
+            }
+            
+            if ($appsToInstall.Count -eq 0) {
+                Show-ProgressDialog -Status "All provisioned apps are already installed" -PercentComplete 100
+                Write-Host "All provisioned apps are already installed on this system" -ForegroundColor Green
+                [System.Windows.Forms.MessageBox]::Show(
+                    "All provisioned apps are already installed on this system.`n`nNo apps need to be reinstalled.",
+                    'Reinstall Apps',
+                    'OK',
+                    'Information'
+                )
+                return
+            }
+            
+            # Create selection dialog
+            Show-ProgressDialog -Status "Building app selection dialog..." -Indeterminate
+            
+            $selectionForm = New-Object System.Windows.Forms.Form
+            $selectionForm.Text = "Select Apps to Reinstall"
+            $selectionForm.Size = New-Object System.Drawing.Size(600, 700)
+            $selectionForm.StartPosition = "CenterScreen"
+            $selectionForm.FormBorderStyle = "FixedDialog"
+            $selectionForm.MaximizeBox = $false
+            $selectionForm.MinimizeBox = $false
+            $selectionForm.Font = New-Object System.Drawing.Font("Segoe UI", 9)
+            $selectionForm.TopMost = $true
+            
+            # Header label
+            $headerLabel = New-Object System.Windows.Forms.Label
+            $headerLabel.Location = New-Object System.Drawing.Point(10, 10)
+            $headerLabel.Size = New-Object System.Drawing.Size(560, 40)
+            $headerLabel.Text = "Select the apps you want to reinstall. Apps without manifests will be installed from the Microsoft Store."
+            $headerLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+            $selectionForm.Controls.Add($headerLabel)
+            
+            # Select All / Deselect All buttons
+            $selectAllBtn = New-Object System.Windows.Forms.Button
+            $selectAllBtn.Location = New-Object System.Drawing.Point(10, 55)
+            $selectAllBtn.Size = New-Object System.Drawing.Size(100, 30)
+            $selectAllBtn.Text = "Select All"
+            $selectionForm.Controls.Add($selectAllBtn)
+            
+            $deselectAllBtn = New-Object System.Windows.Forms.Button
+            $deselectAllBtn.Location = New-Object System.Drawing.Point(120, 55)
+            $deselectAllBtn.Size = New-Object System.Drawing.Size(100, 30)
+            $deselectAllBtn.Text = "Deselect All"
+            $selectionForm.Controls.Add($deselectAllBtn)
+            
+            # CheckedListBox for apps
+            $checkedListBox = New-Object System.Windows.Forms.CheckedListBox
+            $checkedListBox.Location = New-Object System.Drawing.Point(10, 95)
+            $checkedListBox.Size = New-Object System.Drawing.Size(560, 480)
+            $checkedListBox.CheckOnClick = $true
+            $selectionForm.Controls.Add($checkedListBox)
+            
+            # Add apps to the list (sorted alphabetically)
+            $sortedApps = $appsToInstall | Sort-Object -Property DisplayName
+            foreach ($app in $sortedApps) {
+                $manifestPath = "$($app.InstallLocation)\AppxManifest.xml"
+                $hasManifest = Test-Path $manifestPath
+                $displayText = if ($hasManifest) {
+                    "$($app.DisplayName) [Local]"
+                } else {
+                    "$($app.DisplayName) [Microsoft Store]"
+                }
+                [void]$checkedListBox.Items.Add($displayText, $true)  # Check all by default
+            }
+            
+            # Select All button click event
+            $selectAllBtn.Add_Click({
+                for ($i = 0; $i -lt $checkedListBox.Items.Count; $i++) {
+                    $checkedListBox.SetItemChecked($i, $true)
+                }
+            })
+            
+            # Deselect All button click event
+            $deselectAllBtn.Add_Click({
+                for ($i = 0; $i -lt $checkedListBox.Items.Count; $i++) {
+                    $checkedListBox.SetItemChecked($i, $false)
+                }
+            })
+            
+            # Info label
+            $infoLabel = New-Object System.Windows.Forms.Label
+            $infoLabel.Location = New-Object System.Drawing.Point(10, 585)
+            $infoLabel.Size = New-Object System.Drawing.Size(560, 20)
+            $infoLabel.Text = "Found $($appsToInstall.Count) apps available for reinstallation"
+            $infoLabel.ForeColor = [System.Drawing.Color]::Gray
+            $selectionForm.Controls.Add($infoLabel)
+            
+            # Install button
+            $installBtn = New-Object System.Windows.Forms.Button
+            $installBtn.Location = New-Object System.Drawing.Point(370, 615)
+            $installBtn.Size = New-Object System.Drawing.Size(100, 35)
+            $installBtn.Text = "Install"
+            $installBtn.DialogResult = [System.Windows.Forms.DialogResult]::OK
+            $selectionForm.Controls.Add($installBtn)
+            $selectionForm.AcceptButton = $installBtn
+            
+            # Cancel button
+            $cancelBtn = New-Object System.Windows.Forms.Button
+            $cancelBtn.Location = New-Object System.Drawing.Point(480, 615)
+            $cancelBtn.Size = New-Object System.Drawing.Size(100, 35)
+            $cancelBtn.Text = "Cancel"
+            $cancelBtn.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
+            $selectionForm.Controls.Add($cancelBtn)
+            $selectionForm.CancelButton = $cancelBtn
+            
+            # Show the selection dialog (modal dialog will be on top)
+            $dialogResult = $selectionForm.ShowDialog()
+            
+            if ($dialogResult -ne [System.Windows.Forms.DialogResult]::OK) {
+                Show-ProgressDialog -Status "Installation cancelled by user" -PercentComplete 0
+                Write-Host "Installation cancelled by user" -ForegroundColor Yellow
+                Start-Sleep -Seconds 2
+                return
+            }
+            
+            # Get selected apps
+            $selectedApps = @()
+            for ($i = 0; $i -lt $checkedListBox.Items.Count; $i++) {
+                if ($checkedListBox.GetItemChecked($i)) {
+                    $selectedApps += $sortedApps[$i]
+                }
+            }
+            
+            if ($selectedApps.Count -eq 0) {
+                Show-ProgressDialog -Status "No apps selected for installation" -PercentComplete 0
+                Write-Host "No apps selected for installation" -ForegroundColor Yellow
+                Start-Sleep -Seconds 2
+                return
+            }
+            
+            # Process selected apps
+            $totalApps = $selectedApps.Count
+            $processedApps = 0
+            $successCount = 0
+            $failedCount = 0
+            $skippedForStore = 0
+            $storeApps = @()
+            
+            Write-Host "`nInstalling $totalApps selected apps..." -ForegroundColor Cyan
+            Write-Host "Total provisioned packages available: $($provisionedPackages.Count)" -ForegroundColor Gray
+            
+            # Check if winget is available for Store installations
+            $wingetAvailable = $null -ne (Get-Command winget -ErrorAction SilentlyContinue)
+            if ($wingetAvailable) {
+                Write-Host "Windows Package Manager (winget) detected - will use for apps without manifests" -ForegroundColor Green
+            }
+            
+            if ($totalApps -gt 0) {
+                foreach ($package in $selectedApps) {
+                    $processedApps++
+                    $percentComplete = [Math]::Round(($processedApps / $totalApps) * 100)
+                    
+                    # Check if manifest file exists
+                    $manifestPath = "$($package.InstallLocation)\AppxManifest.xml"
+                    if (-not (Test-Path $manifestPath)) {
+                        # Save for Store installation attempt
+                        $storeApps += $package
+                        $skippedForStore++
+                        Write-Host "  [STORE] $($package.DisplayName) - Will attempt Store installation" -ForegroundColor Yellow
+                        continue
+                    }
+                    
+                    try {
+                        Show-ProgressDialog -Status "Installing: $($package.DisplayName) ($processedApps/$totalApps)" -PercentComplete $percentComplete
+                        
+                        # Install the app for the current user from the provisioned package
+                        Add-AppxPackage -Register $manifestPath -DisableDevelopmentMode -ErrorAction Stop
+                        
+                        $successCount++
+                        Write-Host "  [OK] Installed: $($package.DisplayName)" -ForegroundColor Green
+                    } catch {
+                        $failedCount++
+                        Write-Host "  [FAIL] $($package.DisplayName) - $($_.Exception.Message)" -ForegroundColor Red
+                    }
+                }
+                
+                # Attempt to install apps via Microsoft Store using winget
+                if ($storeApps.Count -gt 0 -and $wingetAvailable) {
+                    Write-Host "`n--- Attempting Microsoft Store Installation ---" -ForegroundColor Cyan
+                    $storeSuccess = 0
+                    $storeFailed = 0
+                    
+                    # Map of package names to Microsoft Store IDs
+                    $storeIdMap = @{
+                        "Microsoft.WindowsCalculator" = "9WZDNCRFHVN5"
+                        "Microsoft.Windows.Photos" = "9WZDNCRFJBH4"
+                        "Microsoft.WindowsCamera" = "9WZDNCRFJBBG"
+                        "Microsoft.WindowsAlarms" = "9WZDNCRFJ3PR"
+                        "Microsoft.WindowsMaps" = "9WZDNCRDTBVB"
+                        "Microsoft.WindowsSoundRecorder" = "9WZDNCRFHWKN"
+                        "Microsoft.MicrosoftStickyNotes" = "9NBLGGH4QGHW"
+                        "Microsoft.People" = "9NBLGGH10PG8"
+                        "Microsoft.MicrosoftSolitaireCollection" = "9WZDNCRFHWD2"
+                        "Microsoft.BingWeather" = "9WZDNCRFJ3Q2"
+                        "Microsoft.BingNews" = "9WZDNCRFHVFW"
+                        "Microsoft.MicrosoftOfficeHub" = "9WZDNCRD29V9"
+                        "Microsoft.Getstarted" = "9WZDNCRDTBJJ"
+                        "microsoft.windowscommunicationsapps" = "9WZDNCRFHVQM"
+                        "Microsoft.ZuneMusic" = "9WZDNCRFJ3PT"
+                        "Microsoft.ZuneVideo" = "9WZDNCRFJ3P2"
+                        "Microsoft.YourPhone" = "9NMPJ99VJBWV"
+                        "Microsoft.WindowsFeedbackHub" = "9NBLGGH4R32N"
+                        "Microsoft.GetHelp" = "9PKDZBMV1H3T"
+                        "Microsoft.Xbox.TCUI" = "9NZKPSTSNW4P"
+                        "Microsoft.XboxGameOverlay" = "9NZKPSTSNW4P"
+                        "Microsoft.XboxGamingOverlay" = "9NZKPSTSNW4P"
+                        "Microsoft.XboxIdentityProvider" = "9WZDNCRD1HKW"
+                        "Microsoft.GamingApp" = "9NZKPSTSNW4P"
+                        "Clipchamp.Clipchamp" = "9P1J8S7CCWWT"
+                    }
+                    
+                    foreach ($package in $storeApps) {
+                        $appName = $package.DisplayName
+                        $storeId = $storeIdMap[$appName]
+                        
+                        if (-not $storeId) {
+                            $storeFailed++
+                            Write-Host "  [SKIP] $appName - No Store ID mapping available" -ForegroundColor Gray
+                            continue
+                        }
+                        
+                        try {
+                            Show-ProgressDialog -Status "Installing from Store: $appName" -Indeterminate
+                            Write-Host "  [STORE] Installing $appName (ID: $storeId)..." -ForegroundColor Cyan
+                            
+                            # Install using winget with the Microsoft Store ID
+                            $null = winget install --id $storeId --source msstore --accept-package-agreements --accept-source-agreements --silent 2>&1
+                            
+                            if ($LASTEXITCODE -eq 0) {
+                                $storeSuccess++
+                                $successCount++
+                                Write-Host "  [OK] Installed from Store: $appName" -ForegroundColor Green
+                            } else {
+                                $storeFailed++
+                                Write-Host "  [SKIP] Store installation issue: $appName" -ForegroundColor Gray
+                            }
+                        } catch {
+                            $storeFailed++
+                            Write-Host "  [SKIP] Store installation failed: $appName" -ForegroundColor Gray
+                        }
+                    }
+                    
+                    Write-Host "`nStore Installation Results:" -ForegroundColor Cyan
+                    Write-Host "  Successfully installed from Store: $storeSuccess" -ForegroundColor Green
+                    Write-Host "  Not available/Failed: $storeFailed" -ForegroundColor Gray
+                }
+                
+                Write-Host "`n=== Final Summary ===" -ForegroundColor Cyan
+                Write-Host "  Apps available to reinstall: $totalApps" -ForegroundColor White
+                Write-Host "  Successfully installed (total): $successCount" -ForegroundColor Green
+                Write-Host "  Failed: $failedCount" -ForegroundColor Red
+                Write-Host "  Attempted via Store: $skippedForStore" -ForegroundColor Yellow
+                
+                if ($successCount -gt 0) {
+                    Write-Host "`nIMPORTANT: Restart your PC or sign out/in for apps to appear in Start Menu" -ForegroundColor Yellow
+                }
+                
+                if (-not $wingetAvailable -and $skippedForStore -gt 0) {
+                    Write-Host "`nNOTE: $skippedForStore apps need manifests. Install 'App Installer' from Microsoft Store to enable winget." -ForegroundColor Yellow
+                }
+                
+                Show-ProgressDialog -Status "Completed! $successCount installed, $failedCount failed" -PercentComplete 100
+            } else {
+                Show-ProgressDialog -Status "All provisioned apps are already installed" -PercentComplete 100
+                Write-Host "All provisioned apps are already installed on this system" -ForegroundColor Green
+                Write-Host "No apps need to be reinstalled" -ForegroundColor Gray
+            }
+            
+            Start-Sleep -Seconds 3
         }
     })
     
-    DelProf = [scriptblock]::Create({ 
-        Invoke-ScriptWithProgress -DisplayName "Delete User Profiles" -ScriptBlock {
-            Show-ProgressDialog -Status "Preparing DelProf2 utility..." -Indeterminate
+    DelProf = [scriptblock]::Create(@"
+        Invoke-ScriptWithProgress -DisplayName 'Delete User Profiles' -ScriptBlock {
+            Show-ProgressDialog -Status 'Preparing DelProf2 utility...' -Indeterminate
             
-            if (Test-Path ".\Scripts\Delprof2.exe") {
-                Show-ProgressDialog -Status "Running DelProf2 user profile cleanup..." -Indeterminate
-                Start-Process -FilePath ".\Scripts\Delprof2.exe" -ArgumentList "/u", "/q" -Wait -NoNewWindow
-                Show-ProgressDialog -Status "User profile cleanup completed!" -PercentComplete 100
+            if (Test-Path '$($scriptPaths.Delprof2)') {
+                Show-ProgressDialog -Status 'Running DelProf2 user profile cleanup...' -Indeterminate
+                Start-Process -FilePath '$($scriptPaths.Delprof2)' -ArgumentList '/u', '/q' -Wait -NoNewWindow
+                Show-ProgressDialog -Status 'User profile cleanup completed!' -PercentComplete 100
             } else {
-                Show-ProgressDialog -Status "DelProf2.exe not found in Scripts folder" -PercentComplete 0
-                Write-Warning "DelProf2.exe not found in Scripts folder"
+                Show-ProgressDialog -Status 'DelProf2.exe not found in Scripts folder' -PercentComplete 0
+                Write-Warning 'DelProf2.exe not found in Scripts folder'
             }
             
             Start-Sleep -Seconds 2
         }
-    })
+"@)
     
     DISMRestore = [scriptblock]::Create({ 
         Invoke-ScriptWithProgress -DisplayName "DISM System Health" -ScriptBlock {
@@ -488,13 +1017,9 @@ $Scripts = @{
         }
     })
     
-    WindowsTroubleshooting = [scriptblock]::Create({ 
-        Invoke-ScriptWithProgress -ScriptPath ".\Scripts\Troubleshooting.ps1" -DisplayName "Windows Troubleshooting"
-    })
+    WindowsTroubleshooting = [scriptblock]::Create("Invoke-ScriptWithProgress -ScriptPath '$($scriptPaths.Troubleshooting)' -DisplayName 'Windows Troubleshooting'")
     
-    SystemOptimisation = [scriptblock]::Create({ 
-        Invoke-ScriptWithProgress -ScriptPath ".\Scripts\SystemOptimisation.ps1" -DisplayName "System Optimization" -ArgumentList "--automated"
-    })
+    SystemOptimisation = [scriptblock]::Create("Invoke-ScriptWithProgress -ScriptPath '$($scriptPaths.SystemOptimisation)' -DisplayName 'System Optimization' -ArgumentList '--automated'")
 }
 
 # Validate script block assignment and provide feedback
@@ -652,10 +1177,12 @@ function Add-MaintenanceButton {
     $Button.FlatAppearance.MouseOverBackColor = [System.Drawing.Color]::FromArgb(200, 220, 240)
     $Button.FlatAppearance.MouseDownBackColor = [System.Drawing.Color]::FromArgb(180, 200, 220)
     
-    # Add progress-aware click handler
+    # Add progress-aware click handler with proper variable capture
+    $buttonText = $Text
+    $buttonAction = $Action
     $Button.Add_Click({
         try {
-            Write-Host "Starting maintenance task: $Text" -ForegroundColor Cyan
+            Write-Host "Starting maintenance task: $buttonText" -ForegroundColor Cyan
             
             # Disable all buttons during operation
             foreach ($control in $Form.Controls) {
@@ -665,19 +1192,12 @@ function Add-MaintenanceButton {
             }
             
             # Execute the action
-            $result = & $Action
+            $result = & $buttonAction
             
-            # Show completion message
-            if ($result -ne $false) {
+            # Show completion message only for warnings
+            if ($result -eq $false) {
                 [System.Windows.Forms.MessageBox]::Show(
-                    "$Text completed successfully!",
-                    'Windows Maintenance',
-                    'OK',
-                    'Information'
-                )
-            } else {
-                [System.Windows.Forms.MessageBox]::Show(
-                    "$Text completed with warnings. Check the console for details.",
+                    "$buttonText completed with warnings. Check the console for details.",
                     'Windows Maintenance',
                     'OK',
                     'Warning'
@@ -685,9 +1205,9 @@ function Add-MaintenanceButton {
             }
             
         } catch {
-            Write-Host "Error in $Text`: $_" -ForegroundColor Red
+            Write-Host "Error in $buttonText`: $_" -ForegroundColor Red
             [System.Windows.Forms.MessageBox]::Show(
-                "Error during $Text`: $($_.Exception.Message)",
+                "Error during $buttonText`: $($_.Exception.Message)",
                 'Windows Maintenance - Error',
                 'OK',
                 'Error'
@@ -700,9 +1220,9 @@ function Add-MaintenanceButton {
                 }
             }
             
-            Write-Host "Maintenance task completed: $Text" -ForegroundColor Green
+            Write-Host "Maintenance task completed: $buttonText" -ForegroundColor Green
         }
-    })
+    }.GetNewClosure())
     
     # Add tooltip if description is provided
     if ($Description) {
@@ -838,15 +1358,6 @@ function Start-AutomatedMaintenance {
     Show-ProgressDialog -Status "Complete PC setup finished successfully!" -PercentComplete 100
     Start-Sleep -Seconds 3
     Show-ProgressDialog -Close
-    
-    if (-not $ScheduleMode) {
-        [System.Windows.Forms.MessageBox]::Show(
-            "Complete PC Setup completed successfully!`n`nYour Windows system has been fully optimized and is ready for use.`n`nAll maintenance tasks, cleanups, and optimizations have been performed.",
-            'Windows Maintenance - Complete Setup',
-            'OK',
-            'Information'
-        )
-    }
 }
 
 # Complete PC Setup button - runs everything for a fully optimized system

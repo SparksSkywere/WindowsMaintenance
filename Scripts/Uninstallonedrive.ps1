@@ -1,6 +1,6 @@
 Clear-Host
 # Uninstall OneDrive for Windows
-[System.Windows.MessageBox]::Show('Windows OneDrive Removal, click Ok to close', 'Windows Install Cleaner', 'Ok', 'Information')
+[System.Windows.Forms.MessageBox]::Show('Windows OneDrive Removal, click Ok to close', 'Windows Install Cleaner', 'Ok', 'Information')
 
 # Function to disable OneDrive startup for current user
 Function Disable-OneDriveStartup {
@@ -92,7 +92,5 @@ Remove-StartMenuEntry
 Restart-Explorer
 
 # Final message
-[System.Windows.MessageBox]::Show('OneDrive Uninstalled', 'Windows Troubleshooting', 'Ok', 'Information')
-
 Exit
 # Created by Chris Masters
