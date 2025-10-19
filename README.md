@@ -40,7 +40,7 @@ TroubleShooting:
 In the folder under Scripts is a file called "CustomChanges.ps1", this is for custom additions, it is an example of an older version of the troubleshooting file, you can freely edit this file for use in custom environments / testing of custom code, the panel will need to be added into the main ps1 script otherwise it will not show.
 
 # Easy Launcher
-For users unfamiliar with PowerShell, use `RunMaintenance.bat` to launch the tool. It handles elevation and execution policy automatically. See `Launcher_README.md` for details.
+For users unfamiliar with PowerShell, use `RunMaintenance.bat` to launch the tool.
 
 # Extra Credit
 
