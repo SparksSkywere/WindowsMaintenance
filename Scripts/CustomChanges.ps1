@@ -38,17 +38,27 @@ show-console -hide
 
 #Commands for the buttons
     #$Commandname = {Command}
-    $TroubleInternetbutton = {}
-    $TroubleWindowsUpdatesbutton = {}
-    $TroubleStorebutton = {}
+    $TroubleInternet = {
+        [System.Windows.Forms.MessageBox]::Show('No custom action configured for Internet Connection.','Custom Changes','OK','Information') | Out-Null
+    }
+    $TroubleWindowsUpdates = {
+        [System.Windows.Forms.MessageBox]::Show('No custom action configured for Windows Updates.','Custom Changes','OK','Information') | Out-Null
+    }
+    $TroubleStore = {
+        [System.Windows.Forms.MessageBox]::Show('No custom action configured for Microsoft Store.','Custom Changes','OK','Information') | Out-Null
+    }
 
 #Troubleshooting form
  $Form = New-Object System.Windows.Forms.Form
  $form.Text = 'Windows Troubleshooting'
  $form.Size = New-Object System.Drawing.Size(370,350)
  $form.StartPosition = 'CenterScreen'
- $objIcon = New-Object system.drawing.icon (".\Assets\windowslogo.ico")
- $form.Icon = $objIcon
+ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+ $parentRoot = Split-Path -Parent $scriptRoot
+ $iconPath = Join-Path $parentRoot 'Assets\windowslogo.ico'
+ if (Test-Path $iconPath) {
+     $form.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon($iconPath)
+ }
 
  $FormText = New-Object System.Windows.Forms.Label
  $FormText.Location = New-Object System.Drawing.Point(35,10)

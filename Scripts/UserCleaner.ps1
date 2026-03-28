@@ -1,5 +1,8 @@
 Clear-Host
 #A real basic script going to locations and then deleting, then going to the next in the line and deleting
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
 function Show-Console
 {
     param ([Switch]$Show,[Switch]$Hide)
@@ -76,8 +79,12 @@ $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Windows User Cleanup'
 $form.StartPosition = 'CenterScreen'
 $form.Size = New-Object System.Drawing.Size(310,350)
-$objIcon = New-Object system.drawing.icon (".\Assets\windowslogo.ico")
-$form.Icon = $objIcon
+$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$parentRoot = Split-Path -Parent $scriptRoot
+$iconPath = Join-Path $parentRoot 'Assets\windowslogo.ico'
+if (Test-Path $iconPath) {
+    $form.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon($iconPath)
+}
 
     $CleanupCbutton = New-Object System.Windows.Forms.Button
     $CleanupCbutton.Location = New-Object System.Drawing.Size(25,15)

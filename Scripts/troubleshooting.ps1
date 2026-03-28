@@ -44,6 +44,10 @@ function RestartNeeded () {
     [System.Windows.Forms.MessageBox]::Show('Please restart the computer','Windows Troubleshooting','Ok','Information')
 }
 
+function ExecutionCompleted {
+    [System.Windows.Forms.MessageBox]::Show('Troubleshooting operation completed.','Windows Troubleshooting','OK','Information') | Out-Null
+}
+
 #$scriptPath = split-path -parent $MyInvocation.MyCommand.Definition
 #Functions to split lots of the work up into more readable bits / easier to configure
 #MaxReg
@@ -263,10 +267,13 @@ function netstartappidsvc () {net start appidsvc}
 function netstartcryptsvc () {net start cryptsvc}
 function wsusscan () {wuauclt /resetauthorization /detectnow}
 #Update 0x800f0922 Fix
-function lodctrsync () {lodctr /R | winmgmt.exe /RESYNCPERF}
+function lodctrsync () {
+    lodctr /R
+    winmgmt.exe /RESYNCPERF
+}
 function trustedinstallerauto () {Get-Service -Name "trustedinstaller" | Set-Service -StartupType Automatic}
 function trustedinstallerstart () {net start trustedinstaller}
-function DISMRestore () {Dism /Online /Cleanup-Image /RestoreHealth | ExecutionCompleted}
+function DISMRestore () {Dism /Online /Cleanup-Image /RestoreHealth}
 
 # Cache commands
 $troubleshootingCommands = @{
@@ -305,11 +312,35 @@ function Invoke-TroubleshootingCommand {
 
 #Commands for the buttons
     #$Commandname = {Command}
-    $TroubleInternet = {AdvFirewallReset | netshipreset | netshipresetipv6 | netwinsockreset | flushdns | iprelease | iprenew | ExecutionCompleted}
-    $TroubleWindowsUpdates = {netstopbits | netstopwuauserv | netstopappidsvc | netstopcryptsvc | DeleteSoftwareDistribution | Deletecatroot2 | associateatl | associateurlmon | associatemshtml | associateshdocvw | associatebrowseui | associatejscript | associatevbscript | associatescrrun | associatemsxml | associatemsxml3 | associatemsxm16 | associateactxprxy | associatesoftpub | associatewintrust | associatedssenh | associatersaenh | associategpkcsp | associatesccbase | associateslbcsp | associatecryptdlg | associateoleaut32 | associateole32 | associateshell32 | associateinitpki | associatewuapi | associatewuaueng | associatewuaueng1 | associatewucltui | associatewups | associatewups2 | associatewuweb | associateqmgr | associateqmgrprxy | associatewucltux | associatemuweb | associatewuwebv | netwinsockreset | netwinsockproxyreset | netstartbits | netstartwuauserv | netstartappidsvc | netstartcryptsvc | wsusscan | ExecutionCompleted}
-    $TroubleStore = {WSReset.exe | ExecutionCompleted}
-    $Maxpathreg = {Maxpathreg | ExecutionCompleted}
-    $Updateerror0x800f0922fix = {lodctrsync | trustedinstallerauto | trustedinstallerstart | DISMRestore | ExecutionCompleted}
+    $TroubleInternet = {
+        AdvFirewallReset
+        netshipreset
+        netshipresetipv6
+        netwinsockreset
+        flushdns
+        iprelease
+        iprenew
+        ExecutionCompleted
+    }
+    $TroubleWindowsUpdates = {
+        ResetWindowsUpdateComponents
+        ExecutionCompleted
+    }
+    $TroubleStore = {
+        WSReset.exe
+        ExecutionCompleted
+    }
+    $RunMaxPathReg = {
+        Maxpathreg
+        ExecutionCompleted
+    }
+    $Updateerror0x800f0922fix = {
+        lodctrsync
+        trustedinstallerauto
+        trustedinstallerstart
+        DISMRestore
+        ExecutionCompleted
+    }
     #$HardwareDeviceTroubleshooter = {msdt.exe -id DeviceDiagnostic}
     #DISM /imageC:\ /Cleanup-Image /RestoreHealth /Source:C:\Windows10\Sources\install.esd /Scratchdir:C:\Scratch
 
@@ -320,8 +351,12 @@ function Invoke-TroubleshootingCommand {
  $form.Text = 'Windows Troubleshooting'
  $form.Size = New-Object System.Drawing.Size(370,350)
  $form.StartPosition = 'CenterScreen'
- $objIcon = New-Object system.drawing.icon (".\Assets\windowslogo.ico")
- $form.Icon = $objIcon
+ $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+ $parentRoot = Split-Path -Parent $scriptRoot
+ $iconPath = Join-Path $parentRoot 'Assets\windowslogo.ico'
+ if (Test-Path $iconPath) {
+     $form.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon($iconPath)
+ }
 
  $FormText = New-Object System.Windows.Forms.Label
  $FormText.Location = New-Object System.Drawing.Point(35,10)
@@ -350,7 +385,7 @@ function Invoke-TroubleshootingCommand {
  $Maxpathregbutton.Location = New-Object System.Drawing.Size(165,65)
  $Maxpathregbutton.Size = New-Object System.Drawing.Size(120,23)
  $Maxpathregbutton.Text = "Max_Path Regedit"
- $Maxpathregbutton.Add_Click($Maxpathreg)
+ $Maxpathregbutton.Add_Click($RunMaxPathReg)
 #Windows Update Error 0x800f0922 Fix
  $Updateerror0x800f0922fixbutton = New-Object System.Windows.Forms.Button
  $Updateerror0x800f0922fixbutton.Location = New-Object System.Drawing.Size(35,95)

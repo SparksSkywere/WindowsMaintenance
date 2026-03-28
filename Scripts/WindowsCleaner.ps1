@@ -22,7 +22,8 @@ if ($AutomatedMode) {
     CleanupSystem
     exit 0
 }
-{
+
+function Show-Console {
     param ([Switch]$Show,[Switch]$Hide)
     if (-not ("Console.Window" -as [type])) { 
 
@@ -51,6 +52,17 @@ if ($AutomatedMode) {
 show-console -hide
 
 #Functions
+
+function Invoke-Cleanup {
+    param([string]$Path)
+
+    try {
+        Get-ChildItem -Path $Path -Recurse -Force -ErrorAction SilentlyContinue |
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    } catch {
+        Write-Warning "Cleanup failed for path $Path : $_"
+    }
+}
 
 #Cleanup commands and locations
 $UserCleaner = {Invoke-Cleanup -Path $cleanupPaths.WinTemp; Invoke-Cleanup -Path $cleanupPaths.Prefetch; Invoke-Cleanup -Path $cleanupPaths.LocalTemp}
@@ -375,8 +387,12 @@ $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Windows User Cleanup'
 $form.StartPosition = 'CenterScreen'
 $form.Size = New-Object System.Drawing.Size(310,350)
-$objIcon = New-Object system.drawing.icon (".\Assets\windowslogo.ico")
-$form.Icon = $objIcon
+$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$parentRoot = Split-Path -Parent $scriptRoot
+$iconPath = Join-Path $parentRoot 'Assets\windowslogo.ico'
+if (Test-Path $iconPath) {
+    $form.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon($iconPath)
+}
 
     $CleanupSystemButton = New-Object System.Windows.Forms.Button
     $CleanupSystemButton.Location = New-Object System.Drawing.Size(25,135)

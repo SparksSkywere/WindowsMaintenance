@@ -1,6 +1,18 @@
 Clear-Host
-# Uninstall OneDrive for Windows
-[System.Windows.Forms.MessageBox]::Show('Windows OneDrive Removal, click Ok to close', 'Windows Install Cleaner', 'Ok', 'Information')
+Add-Type -AssemblyName System.Windows.Forms
+
+# Ask whether OneDrive uninstall should run
+$oneDriveChoice = [System.Windows.Forms.MessageBox]::Show(
+    'Do you want OneDrive?`n`nSelect Yes to continue OneDrive uninstall.`nSelect No to skip this step.',
+    'Windows Install Cleaner',
+    'YesNo',
+    'Question'
+)
+
+if ($oneDriveChoice -eq [System.Windows.Forms.DialogResult]::No) {
+    Write-Output "Skipping OneDrive uninstall by user choice."
+    Exit
+}
 
 # Function to disable OneDrive startup for current user
 Function Disable-OneDriveStartup {
@@ -12,7 +24,7 @@ Function Disable-OneDriveStartup {
 }
 
 # Kill OneDrive and Explorer processes
-Function Stop-Process {
+Function Stop-OneDriveProcesses {
     Write-Output "Stopping OneDrive and Explorer processes..."
     taskkill /F /IM "OneDrive.exe" /T
     taskkill /F /IM "explorer.exe" /T
@@ -48,7 +60,9 @@ Function Remove-OneDriveLeftovers {
 # Remove OneDrive from Explorer sidebar
 Function Remove-OneDriveFromSidebar {
     Write-Output "Removing OneDrive from Explorer sidebar..."
-    New-PSDrive -PSProvider "Registry" -Root "HKEY_CLASSES_ROOT" -Name "HKCR"
+    if (-not (Get-PSDrive -Name "HKCR" -ErrorAction SilentlyContinue)) {
+        New-PSDrive -PSProvider "Registry" -Root "HKEY_CLASSES_ROOT" -Name "HKCR" | Out-Null
+    }
     $clsidPath = "HKCR:\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}"
     $clsidWowPath = "HKCR:\Wow6432Node\CLSID\{018D5C66-4533-4307-9B53-224DE2ED1FE6}"
     
@@ -57,7 +71,7 @@ Function Remove-OneDriveFromSidebar {
     mkdir -Force $clsidWowPath
     Set-ItemProperty -Path $clsidWowPath -Name "System.IsPinnedToNameSpaceTree" -Value 0
     
-    Remove-PSDrive "HKCR"
+    Remove-PSDrive "HKCR" -ErrorAction SilentlyContinue
 }
 
 # Remove OneDrive for new users
@@ -77,19 +91,35 @@ Function Remove-StartMenuEntry {
 # Restart explorer
 Function Restart-Explorer {
     Write-Output "Restarting Explorer..."
-    Start-Process "explorer.exe"
-    Start-Sleep 5  # Allow time for Explorer to reload
+    $explorer = Get-Process -Name "explorer" -ErrorAction SilentlyContinue
+    if (-not $explorer) {
+        Start-Process "explorer.exe"
+        Start-Sleep 5  # Allow time for Explorer to reload
+    }
+}
+
+Function Ensure-ExplorerRunning {
+    $explorer = Get-Process -Name "explorer" -ErrorAction SilentlyContinue
+    if (-not $explorer) {
+        Write-Output "Explorer still not detected. Starting explorer.exe..."
+        Start-Process "explorer.exe"
+        Start-Sleep 2
+    }
 }
 
 # Main execution
-Disable-OneDriveStartup
-Stop-Process
-Uninstall-OneDrive
-Remove-OneDriveLeftovers
-Remove-OneDriveFromSidebar
-Remove-OneDriveForNewUsers
-Remove-StartMenuEntry
-Restart-Explorer
+try {
+    Disable-OneDriveStartup
+    Stop-OneDriveProcesses
+    Uninstall-OneDrive
+    Remove-OneDriveLeftovers
+    Remove-OneDriveFromSidebar
+    Remove-OneDriveForNewUsers
+    Remove-StartMenuEntry
+} finally {
+    Restart-Explorer
+    Ensure-ExplorerRunning
+}
 
 # Final message
 Exit

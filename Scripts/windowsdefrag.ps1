@@ -46,7 +46,7 @@ function Start-OptimizedDefrag {
         # Get drive information using modern PowerShell cmdlets
         $drive = Get-Volume -DriveLetter $DriveLetter -ErrorAction SilentlyContinue
         if (-not $drive) {
-            Show-MessageBox "Drive $DriveLetter not found or inaccessible."
+            [System.Windows.Forms.MessageBox]::Show("Drive $DriveLetter not found or inaccessible.", "Windows Quick Defrag", 'OK', 'Error') | Out-Null
             return
         }
         
@@ -141,8 +141,12 @@ $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Windows Quick Defrag'
 $form.StartPosition = 'CenterScreen'
 $form.Size = New-Object System.Drawing.Size(310,350)
-$objIcon = New-Object system.drawing.icon (".\Assets\windowslogo.ico")
-$form.Icon = $objIcon
+$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$parentRoot = Split-Path -Parent $scriptRoot
+$iconPath = Join-Path $parentRoot 'Assets\windowslogo.ico'
+if (Test-Path $iconPath) {
+    $form.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon($iconPath)
+}
 
 #Create a list box to display the drive information
 $listBox = New-Object System.Windows.Forms.ListBox
@@ -152,8 +156,14 @@ $form.Controls.Add($listBox)
 
 #Execute code when selecting a drive
 $listBox.Add_SelectedIndexChanged({
-    $SelectedDrive = $listBox.SelectedItem
-    Start-OptimizedDefrag -DriveLetter $SelectedDrive
+    $selectedDriveText = [string]$listBox.SelectedItem
+    if ([string]::IsNullOrWhiteSpace($selectedDriveText)) {
+        return
+    }
+
+    if ($selectedDriveText -match 'Drive\s-\s([A-Z]):') {
+        Start-OptimizedDefrag -DriveLetter $matches[1]
+    }
 })
 
 #Get Connected drives information + sort via name

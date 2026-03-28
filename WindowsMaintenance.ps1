@@ -160,7 +160,7 @@ function Show-ProgressDialog {
             $Global:MainProgressForm.MaximizeBox = $false
             $Global:MainProgressForm.MinimizeBox = $false
             $Global:MainProgressForm.ControlBox = $false
-            $Global:MainProgressForm.TopMost = $true
+            $Global:MainProgressForm.TopMost = $false
             
             # Main progress bar
             $Global:MainProgressBar = New-Object System.Windows.Forms.ProgressBar
@@ -234,40 +234,17 @@ function Invoke-ScriptWithProgress {
             Show-ProgressDialog -Status "Running $DisplayName script..." -Indeterminate
             
             # Convert relative path to absolute path
-            $absoluteScriptPath = Resolve-Path $ScriptPath
-            
-            $job = Start-Job -ScriptBlock {
-                param($path, $scriptArgs)
-                try {
-                    # Load required assemblies in the job
-                    Add-Type -AssemblyName "System.Windows.Forms" -ErrorAction SilentlyContinue
-                    Add-Type -AssemblyName "System.Drawing" -ErrorAction SilentlyContinue
-                    
-                    if ($scriptArgs) {
-                        & $path @scriptArgs
-                    } else {
-                        & $path
-                    }
-                    return $true
-                } catch {
-                    Write-Error $_.Exception.Message
-                    return $false
-                }
-            } -ArgumentList $absoluteScriptPath, $ArgumentList
-            
-            # Monitor job progress
-            $timeout = 300  # 5 minutes timeout
-            $elapsed = 0
-            
-            while ($job.State -eq 'Running' -and $elapsed -lt $timeout) {
-                Show-ProgressDialog -Status "Running $DisplayName... ($elapsed seconds)" -Indeterminate
-                Start-Sleep -Seconds 1
-                $elapsed++
+            $absoluteScriptPath = (Resolve-Path $ScriptPath).Path
+
+            # Run in a separate interactive process so child dialogs can be displayed safely.
+            # This also prevents child script Exit statements from closing the main UI.
+            $psArguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $absoluteScriptPath)
+            if ($ArgumentList) {
+                $psArguments += $ArgumentList
             }
-            
-            $result = Wait-Job $job -Timeout 60 | Receive-Job
-            Remove-Job $job -Force
-            $success = $result -eq $true
+
+            $childProcess = Start-Process -FilePath powershell.exe -ArgumentList $psArguments -Wait -PassThru -WindowStyle Hidden
+            $success = $childProcess.ExitCode -eq 0
         } else {
             Write-Warning "Script not found: $ScriptPath"
             Show-ProgressDialog -Status "Script not found: $DisplayName" -PercentComplete 0
@@ -496,6 +473,12 @@ $Scripts = @{
             $deselectAllBtn.Size = New-Object System.Drawing.Size(100, 30)
             $deselectAllBtn.Text = "Deselect All"
             $selectionForm.Controls.Add($deselectAllBtn)
+
+            $optimizedBtn = New-Object System.Windows.Forms.Button
+            $optimizedBtn.Location = New-Object System.Drawing.Point(230, 55)
+            $optimizedBtn.Size = New-Object System.Drawing.Size(120, 30)
+            $optimizedBtn.Text = "Optimised"
+            $selectionForm.Controls.Add($optimizedBtn)
             
             # Search box
             $searchLabel = New-Object System.Windows.Forms.Label
@@ -526,6 +509,42 @@ $Scripts = @{
                 $allApps += $appInfo
                 [void]$checkedListBox.Items.Add($appInfo.DisplayText, $false)  # Unchecked by default for safety
             }
+
+            $optimizedAppPatterns = @(
+                'Microsoft.Bing*'
+                'Microsoft.GetHelp'
+                'Microsoft.Getstarted'
+                'Microsoft.MicrosoftOfficeHub'
+                'Microsoft.People'
+                'Microsoft.SkypeApp'
+                'Microsoft.ZuneMusic'
+                'Microsoft.ZuneVideo'
+                'Microsoft.WindowsMaps'
+                'Microsoft.WindowsFeedbackHub'
+                'Microsoft.Wallet'
+                'Microsoft.MixedReality.Portal'
+                'Microsoft.GamingApp'
+                'Microsoft.Xbox*'
+                'Microsoft.YourPhone'
+                'Microsoft.PowerAutomateDesktop'
+                'Microsoft.Windows.DevHome*'
+                'Microsoft.MicrosoftSolitaireCollection'
+                'Clipchamp.Clipchamp'
+                'MicrosoftTeams'
+                'Microsoft.549981C3F5F10'
+            )
+
+            function Test-OptimizedRemovalCandidate {
+                param([string]$AppName)
+
+                foreach ($pattern in $optimizedAppPatterns) {
+                    if ($AppName -like $pattern) {
+                        return $true
+                    }
+                }
+
+                return $false
+            }
             
             # Select All button click event
             $selectAllBtn.Add_Click({
@@ -538,6 +557,21 @@ $Scripts = @{
             $deselectAllBtn.Add_Click({
                 for ($i = 0; $i -lt $checkedListBox.Items.Count; $i++) {
                     $checkedListBox.SetItemChecked($i, $false)
+                }
+            })
+
+            # Optimised button click event: selects only known non-core consumer apps.
+            $optimizedBtn.Add_Click({
+                for ($i = 0; $i -lt $checkedListBox.Items.Count; $i++) {
+                    $displayText = [string]$checkedListBox.Items[$i]
+                    $appInfo = $allApps | Where-Object { $_.DisplayText -eq $displayText } | Select-Object -First 1
+
+                    if ($appInfo) {
+                        $shouldSelect = Test-OptimizedRemovalCandidate -AppName $appInfo.App.Name
+                        $checkedListBox.SetItemChecked($i, $shouldSelect)
+                    } else {
+                        $checkedListBox.SetItemChecked($i, $false)
+                    }
                 }
             })
             
@@ -639,6 +673,15 @@ $Scripts = @{
             $processedApps = 0
             $successCount = 0
             $failedCount = 0
+
+            function Ensure-ExplorerShell {
+                $explorerProcess = Get-Process -Name explorer -ErrorAction SilentlyContinue
+                if (-not $explorerProcess) {
+                    Write-Host "Explorer was not running; restarting shell..." -ForegroundColor Yellow
+                    Start-Process explorer.exe
+                    Start-Sleep -Seconds 2
+                }
+            }
             
             Write-Host "`nRemoving $totalApps selected apps..." -ForegroundColor Cyan
             
@@ -663,6 +706,8 @@ $Scripts = @{
             Write-Host "  Total processed: $totalApps" -ForegroundColor White
             Write-Host "  Successfully removed: $successCount" -ForegroundColor Green
             Write-Host "  Failed: $failedCount" -ForegroundColor Red
+
+            Ensure-ExplorerShell
             
             Show-ProgressDialog -Status "Completed! $successCount removed, $failedCount failed" -PercentComplete 100
             Start-Sleep -Seconds 3
@@ -1019,7 +1064,21 @@ $Scripts = @{
     
     WindowsTroubleshooting = [scriptblock]::Create("Invoke-ScriptWithProgress -ScriptPath '$($scriptPaths.Troubleshooting)' -DisplayName 'Windows Troubleshooting'")
     
-    SystemOptimisation = [scriptblock]::Create("Invoke-ScriptWithProgress -ScriptPath '$($scriptPaths.SystemOptimisation)' -DisplayName 'System Optimization' -ArgumentList '--automated'")
+    SystemOptimisation = [scriptblock]::Create({
+        # Run the System Optimization script directly
+        $scriptPath = $scriptPaths.SystemOptimisation
+        if (Test-Path $scriptPath) {
+            & $scriptPath
+        } else {
+            Write-Host "System Optimization script not found: $scriptPath" -ForegroundColor Red
+            [System.Windows.Forms.MessageBox]::Show(
+                "System Optimization script not found: $scriptPath",
+                'Windows Maintenance - Error',
+                'OK',
+                'Error'
+            )
+        }
+    })
 }
 
 # Validate script block assignment and provide feedback
@@ -1089,11 +1148,12 @@ try {
 
 # Try to set icon if available
 try {
-    if (Test-Path ".\Assets\windowslogo.ico") {
-        $Form.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon(".\Assets\windowslogo.ico")
+    $iconPath = Join-Path $ScriptRoot "Assets\windowslogo.ico"
+    if (Test-Path $iconPath) {
+        $Form.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon($iconPath)
         if ($DebugMode) { Write-DebugMessage "Icon loaded successfully" "INFO" }
     } else {
-        if ($DebugMode) { Write-DebugMessage "Icon file not found: .\Assets\windowslogo.ico" "WARN" }
+        if ($DebugMode) { Write-DebugMessage "Icon file not found: $iconPath" "WARN" }
     }
 } catch {
     if ($DebugMode) { Write-DebugMessage "Could not load icon file: $($_.Exception.Message)" "WARN" }
@@ -1177,52 +1237,81 @@ function Add-MaintenanceButton {
     $Button.FlatAppearance.MouseOverBackColor = [System.Drawing.Color]::FromArgb(200, 220, 240)
     $Button.FlatAppearance.MouseDownBackColor = [System.Drawing.Color]::FromArgb(180, 200, 220)
     
-    # Add progress-aware click handler with proper variable capture
+    # Add click handler based on button type
     $buttonText = $Text
     $buttonAction = $Action
-    $Button.Add_Click({
-        try {
-            Write-Host "Starting maintenance task: $buttonText" -ForegroundColor Cyan
-            
-            # Disable all buttons during operation
-            foreach ($control in $Form.Controls) {
-                if ($control -is [System.Windows.Forms.Button]) {
-                    $control.Enabled = $false
-                }
-            }
-            
-            # Execute the action
-            $result = & $buttonAction
-            
-            # Show completion message only for warnings
-            if ($result -eq $false) {
+    if ($Text -eq "Performance Optimization") {
+        # Special handler for System Optimization that shows a form
+        $Button.Add_Click({
+            try {
+                Write-Host "Starting System Optimization..." -ForegroundColor Cyan
+                # Hide the main form temporarily to avoid modal dialog conflicts
+                $Form.Visible = $false
+                Start-Sleep -Milliseconds 200  # Brief pause for UI update
+                # Execute the action directly (shows modal form)
+                & $buttonAction
+                # Show the main form again
+                $Form.Visible = $true
+                $Form.Activate()
+            } catch {
+                Write-Host "Error in System Optimization: $_" -ForegroundColor Red
                 [System.Windows.Forms.MessageBox]::Show(
-                    "$buttonText completed with warnings. Check the console for details.",
-                    'Windows Maintenance',
+                    "Error during System Optimization: $($_.Exception.Message)",
+                    'Windows Maintenance - Error',
                     'OK',
-                    'Warning'
+                    'Error'
                 )
+                # Make sure main form is visible in case of error
+                $Form.Visible = $true
+                $Form.Activate()
             }
-            
-        } catch {
-            Write-Host "Error in $buttonText`: $_" -ForegroundColor Red
-            [System.Windows.Forms.MessageBox]::Show(
-                "Error during $buttonText`: $($_.Exception.Message)",
-                'Windows Maintenance - Error',
-                'OK',
-                'Error'
-            )
-        } finally {
-            # Re-enable all buttons
-            foreach ($control in $Form.Controls) {
-                if ($control -is [System.Windows.Forms.Button]) {
-                    $control.Enabled = $true
+        }.GetNewClosure())
+    } else {
+        # Standard handler for other buttons
+        $Button.Add_Click({
+            try {
+                Write-Host "Starting maintenance task: $buttonText" -ForegroundColor Cyan
+                
+                # Disable all buttons during operation
+                foreach ($control in $Form.Controls) {
+                    if ($control -is [System.Windows.Forms.Button]) {
+                        $control.Enabled = $false
+                    }
                 }
+                
+                # Execute the action
+                $result = & $buttonAction
+                
+                # Show completion message only for warnings
+                if ($result -eq $false) {
+                    [System.Windows.Forms.MessageBox]::Show(
+                        "$buttonText completed with warnings. Check the console for details.",
+                        'Windows Maintenance',
+                        'OK',
+                        'Warning'
+                    )
+                }
+                
+            } catch {
+                Write-Host "Error in $buttonText`: $_" -ForegroundColor Red
+                [System.Windows.Forms.MessageBox]::Show(
+                    "Error during $buttonText`: $($_.Exception.Message)",
+                    'Windows Maintenance - Error',
+                    'OK',
+                    'Error'
+                )
+            } finally {
+                # Re-enable all buttons
+                foreach ($control in $Form.Controls) {
+                    if ($control -is [System.Windows.Forms.Button]) {
+                        $control.Enabled = $true
+                    }
+                }
+                
+                Write-Host "Maintenance task completed: $buttonText" -ForegroundColor Green
             }
-            
-            Write-Host "Maintenance task completed: $buttonText" -ForegroundColor Green
-        }
-    }.GetNewClosure())
+        }.GetNewClosure())
+    }
     
     # Add tooltip if description is provided
     if ($Description) {
@@ -1326,11 +1415,6 @@ function Start-AutomatedMaintenance {
         @{ Name = "OneDrive Uninstaller"; Script = $Scripts.WindowsUninstallOneDrive; Weight = 8 }
         @{ Name = "System File Cleanup"; Script = $Scripts.WindowsCleaner; Weight = 12 }
         @{ Name = "Delete User Profiles"; Script = $Scripts.DelProf; Weight = 8 }
-        @{ Name = "System Health Check"; Script = $Scripts.DISMRestore; Weight = 15 }
-        @{ Name = "System File Verification"; Script = $Scripts.SFCRepair; Weight = 12 }
-        @{ Name = "Disk Check and Repair"; Script = $Scripts.DiskCheck; Weight = 10 }
-        @{ Name = "Disk Defragmentation"; Script = $Scripts.Defrag; Weight = 10 }
-        @{ Name = "Windows Troubleshooting"; Script = $Scripts.WindowsTroubleshooting; Weight = 8 }
         @{ Name = "System Optimization"; Script = $Scripts.SystemOptimisation; Weight = 7 }
     )
     
@@ -1363,7 +1447,7 @@ function Start-AutomatedMaintenance {
 # Complete PC Setup button - runs everything for a fully optimized system
 Add-MaintenanceButton "Complete PC Setup" (New-Object System.Drawing.Point($leftButtonX, $currentY)) {
     $result = [System.Windows.Forms.MessageBox]::Show(
-        "This will run the COMPLETE PC Setup sequence - all maintenance tasks, cleanups, and optimizations.`n`nThis is the ultimate one-click solution to fully optimize your Windows system.`n`nThis may take 20-45 minutes depending on your system.`n`nDo you want to continue?",
+        "This will run the COMPLETE PC Setup sequence - maintenance tasks, cleanups, and optimizations.`n`nFor safety and speed, this mode SKIPS DISM, SFC, and CHKDSK scans.`n`nThis may take 10-30 minutes depending on your system.`n`nDo you want to continue?",
         'Windows Maintenance - Complete PC Setup',
         'YesNo',
         'Question'

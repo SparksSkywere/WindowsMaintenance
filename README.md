@@ -4,7 +4,7 @@ This is a set of scripts I have made or utilities downloaded (credit at bottom),
 
 You may also take the scripts and use them in your own programs under the GNU License agreement and credit is given to me. You may also want to check out all the other repositories under my name for various programs!
 
-# Readme.txt
+# Readme
 
 Quick Readme for running the script
 Make sure you are running as administrator.
@@ -49,3 +49,6 @@ Microsoft Powershell: https://docs.microsoft.com/en-us/powershell/
 Delprof 2, created by Helge Klein
 
 Link to download: https://helgeklein.com/free-tools/delprof2-user-profile-deletion-tool/
+
+# Final Note
+This program has paused development and on low priority.
