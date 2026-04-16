@@ -17,63 +17,74 @@ param (
     )
 
 #Applications in a list using package names, feel free to add custom names
-$ProvisionedAppPackageNames = @(
+$OptimizedAppPackagePatterns = @(
     "Microsoft.BingFinance"
     "Microsoft.BingNews"
+    "Microsoft.BingSearch"
     "Microsoft.BingSports"
     "Microsoft.BingWeather"
-    "Microsoft.MicrosoftOfficeHub"
+    "Microsoft.GetHelp"
     "Microsoft.Getstarted"
-    "microsoft.windowscommunicationsapps"
+    "Microsoft.MicrosoftOfficeHub"
+    "Microsoft.MicrosoftSolitaireCollection"
+    "Microsoft.MicrosoftTeams"
+    "Microsoft.MixedReality.Portal"
     "Microsoft.Office.OneNote"
+    "Microsoft.OutlookForWindows"
     "Microsoft.People"
+    "Microsoft.PowerAutomateDesktop"
     "Microsoft.SkypeApp"
+    "Microsoft.Todos"
+    "Microsoft.Wallet"
+    "Microsoft.Windows.DevHome*"
+    "Microsoft.Windows.FeedbackHub"
+    "Microsoft.WindowsMaps"
+    "Microsoft.WindowsSoundRecorder"
+    "Microsoft.Xbox*"
+    "Microsoft.YourPhone"
     "Microsoft.ZuneMusic"
     "Microsoft.ZuneVideo"
-    "Microsoft.WindowsMaps"
-    "Microsoft.WindowsFeedbackHub"
-    "Microsoft.Wallet"
-    "Microsoft.People"
-    "Microsoft.MixedReality.Portal"
-    "Microsoft.GetHelp"
+    "Microsoft.549981C3F5F10"
+    "microsoft.windowscommunicationsapps"
+    "Clipchamp.Clipchamp"
+    "MicrosoftCorporationII.QuickAssist"
+    "MSTeams"
 )
 
-#delete all that is named with improved error handling and logging
-foreach ($ProvisionedAppName in $ProvisionedAppPackageNames) {
-    Write-Host "Processing app: $ProvisionedAppName" -ForegroundColor Yellow
-    
+function Remove-AppPackagesByPattern {
+    param([Parameter(Mandatory)][string]$Pattern)
+
+    Write-Host "Processing app pattern: $Pattern" -ForegroundColor Yellow
+
     try {
-        # Remove for current user
-        $currentUserApps = Get-AppxPackage -Name $ProvisionedAppName -ErrorAction SilentlyContinue
+        $currentUserApps = Get-AppxPackage -Name $Pattern -ErrorAction SilentlyContinue
         if ($currentUserApps) {
             foreach ($app in $currentUserApps) {
                 Write-Host "Removing $($app.Name) for current user..." -ForegroundColor Cyan
                 Remove-AppxPackage -Package $app.PackageFullName -ErrorAction SilentlyContinue
             }
         }
-        
-        # Remove for all users (requires admin)
-        $allUserApps = Get-AppxPackage -Name $ProvisionedAppName -AllUsers -ErrorAction SilentlyContinue
+
+        $allUserApps = Get-AppxPackage -Name $Pattern -AllUsers -ErrorAction SilentlyContinue
         if ($allUserApps) {
             foreach ($app in $allUserApps) {
                 Write-Host "Removing $($app.Name) for all users..." -ForegroundColor Cyan
                 Remove-AppxPackage -Package $app.PackageFullName -AllUsers -ErrorAction SilentlyContinue
             }
         }
-        
-        # NOTE: Provisioned packages are NOT removed to allow reinstallation via "Reinstall Default Apps" button
-        # If you want to permanently remove apps from the system image, uncomment the lines below:
-        # $provisionedApps = Get-AppXProvisionedPackage -Online | Where-Object DisplayName -Like "*$ProvisionedAppName*"
-        # if ($provisionedApps) {
-        #     foreach ($app in $provisionedApps) {
-        #         Write-Host "Removing provisioned package: $($app.DisplayName)..." -ForegroundColor Cyan
-        #         Remove-AppxProvisionedPackage -Online -PackageName $app.PackageName -ErrorAction SilentlyContinue
-        #     }
-        # }
-        
     } catch {
-        Write-Warning "Failed to process $ProvisionedAppName`: $_"
+        Write-Warning "Failed to process $Pattern`: $_"
     }
+}
+
+foreach ($appPattern in $OptimizedAppPackagePatterns) {
+    Remove-AppPackagesByPattern -Pattern $appPattern
+}
+
+function Get-TargetServices {
+    param([Parameter(Mandatory)][string]$ServiceName)
+
+    @(Get-Service -Name $ServiceName, "$ServiceName*" -ErrorAction SilentlyContinue | Sort-Object Name -Unique)
 }
 
 #Disable services for Windows 10
@@ -89,10 +100,14 @@ Function DisService {
             'DiagTrack',                    # Connected User Experiences and Telemetry
             'dmwappushservice',             # WAP Push Message Routing Service
             'OneSyncSvc',                   # Sync Host (can break mail sync if used)
+            'CDPSvc',                       # Connected Devices Platform Service
+            'CDPUserSvc',                   # Connected Devices Platform User Service
+            'DoSvc',                        # Delivery Optimization
             'XblAuthManager',               # Xbox Live Auth Manager
             'XblGameSave',                  # Xbox Live Game Save Service
             'XboxNetApiSvc',                # Xbox Live Networking Service
             'XboxGipSvc',                   # Xbox Accessory Management Service
+            'BcastDVRUserService',          # Game DVR and broadcast
             'WMPNetworkSvc',                # Windows Media Player Network Sharing Service
             'WSearch',                      # Windows Search (optional - affects search)
             'TrkWks',                       # Distributed Link Tracking Client
@@ -106,21 +121,27 @@ Function DisService {
             'lfsvc',                        # Geolocation Service
             'SEMgrSvc',                     # Payments and NFC/SE Manager
             'WpcMonSvc',                    # Parental Controls
+            'PhoneSvc',                     # Phone Service / Phone Link backend
+            'PcaSvc',                       # Program Compatibility Assistant
+            'RemoteRegistry',               # Remote Registry
+            'AJRouter',                     # AllJoyn Router Service
             'Fax',                          # Fax Service
             'DusmSvc'                       # Data Usage
         )
         
         foreach ($service in $servicesToDisable) {
             try {
-                $svc = Get-Service -Name $service -ErrorAction SilentlyContinue
-                if ($svc) {
-                    Write-Host "Processing service: $service" -ForegroundColor Yellow
-                    if ($svc.Status -eq 'Running') {
-                        Stop-Service -Name $service -Force -ErrorAction SilentlyContinue
-                        Write-Host "  Stopped $service" -ForegroundColor Green
+                $matchedServices = Get-TargetServices -ServiceName $service
+                if ($matchedServices) {
+                    foreach ($svc in $matchedServices) {
+                        Write-Host "Processing service: $($svc.Name)" -ForegroundColor Yellow
+                        if ($svc.Status -eq 'Running') {
+                            Stop-Service -Name $svc.Name -Force -ErrorAction SilentlyContinue
+                            Write-Host "  Stopped $($svc.Name)" -ForegroundColor Green
+                        }
+                        Set-Service -Name $svc.Name -StartupType Disabled -ErrorAction SilentlyContinue
+                        Write-Host "  Disabled $($svc.Name)" -ForegroundColor Green
                     }
-                    Set-Service -Name $service -StartupType Disabled -ErrorAction SilentlyContinue
-                    Write-Host "  Disabled $service" -ForegroundColor Green
                 } else {
                     Write-Host "  Service $service not found" -ForegroundColor Gray
                 }

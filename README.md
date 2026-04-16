@@ -1,54 +1,104 @@
-# Windows Maintenance Powershell Script
+# Windows Maintenance (PowerShell)
 
-This is a set of scripts I have made or utilities downloaded (credit at bottom), these scripts can only be ran one after another, so be patient while one script executes.
+Windows Maintenance is a Windows 10/11 administrative toolkit that combines cleanup, repair, privacy hardening, debloat, and performance tuning in one guided interface.
 
-You may also take the scripts and use them in your own programs under the GNU License agreement and credit is given to me. You may also want to check out all the other repositories under my name for various programs!
+The project is designed to be practical for real systems:
+- Safe-by-default baseline actions are prioritised.
+- Heavier or repair-focused tasks are available but optional.
+- Complete runs are guided by a planner with preset profiles and per-task explanations.
 
-# Readme
+## Requirements
 
-Quick Readme for running the script
-Make sure you are running as administrator.
+- Windows 10 or Windows 11
+- Administrator privileges
+- PowerShell execution allowed for the session
 
-1. (If you already set execution policy skip to step 2) Run the other .ps1 script that will set execution policy to "bypass" do not worry windows will automatically restore the execution policy when the computer is next turned on
-2. If you are getting an error about the Policy put in the following command with admin privileges with Powershell: "Set-ExecutionPolicy Bypass -Force" (I have also added a seperate script that also does this command, you may run with admin on Powershell by navigating to the directory with: cd *"PATH"*)
-3. Double-click `RunMaintenance.bat` to launch the tool easily, or run `WindowsMaintenance.ps1` directly in PowerShell as Administrator.
+## Quick Start
 
-# What things this script does:
+1. Run as Administrator.
+2. If execution policy blocks scripts, use:
+	`Set-ExecutionPolicy Bypass -Force`
+3. Launch using either:
+	- `RunMaintenance.bat` (easiest)
+	- `WindowsMaintenance.ps1` in elevated PowerShell
 
-Maintenance:
-1. Windows Install Cleanup (Will detect W10/W11)
-2. Re-install Windows default Apps
-3. Uninstall One-Drive
-4. Disk Cleanup Utility
-5. Delprof
-6. User Cleanup Utility
-7. DISM Restore Health
-8. Defragmentation Utility
-9. Windows System Scan and repair
-10. Check Disk (Volume Repair)
-11. System Optimisations
+Note: execution policy changes are often reverted by system policy or at reboot, depending on your environment configuration.
 
-TroubleShooting:
-1. Internet
-2. Windows Update
-3. Microsoft Store
-4. Max Path length registry change
-5. Windows Update Error 0x800f0922 Fix
+## What The Tool Includes
 
-# Custom Script
+### Core Maintenance and Cleanup
+1. Windows Install Cleanup (Windows 10/11 aware)
+2. Reinstall Default Apps (restore removed inbox apps)
+3. Uninstall OneDrive
+4. System Cleaner
+5. Delete Old User Profiles (DelProf2)
+6. User Profile Temp Cleaner
 
-In the folder under Scripts is a file called "CustomChanges.ps1", this is for custom additions, it is an example of an older version of the troubleshooting file, you can freely edit this file for use in custom environments / testing of custom code, the panel will need to be added into the main ps1 script otherwise it will not show.
+### Repair and Health
+1. DISM health scan and repair
+2. System File Checker (SFC)
+3. Disk check and repair
+4. Disk optimisation / defragmentation workflow
 
-# Easy Launcher
-For users unfamiliar with PowerShell, use `RunMaintenance.bat` to launch the tool.
+### Optimisation and Privacy
+1. Performance tuning controls
+2. Privacy hardening controls
+3. Service and scheduled task reduction
+4. RAM footprint tuning (safe and advanced modes)
+5. UI cleanup (including widgets/feed-style surfaces)
+6. Optional Windows AI feature disablement
 
-# Extra Credit
+### Troubleshooting
+The troubleshooting module includes guided routines for common issues such as:
+- Internet/network faults
+- Windows Update faults
+- Microsoft Store faults
+- Max path policy adjustments
+- Selected update error remediation flows
 
-Microsoft Powershell: https://docs.microsoft.com/en-us/powershell/
+## Complete PC Setup Planner
 
-Delprof 2, created by Helge Klein
+The `Complete PC Setup` workflow opens a planner before any actions run.
 
-Link to download: https://helgeklein.com/free-tools/delprof2-user-profile-deletion-tool/
+Key behaviours:
+- Recommended tasks are pre-selected.
+- Optional/repair-heavy tasks are left unticked by default.
+- Selecting a task shows detailed explanation and expected impact.
+- Optional Windows AI disablement is available and clearly described.
 
-# Final Note
-This program has paused development and on low priority.
+### Preset Profiles
+
+1. `Minimal`
+	- Light cleanup and baseline optimisation.
+	- Avoids repair-heavy or broad-impact changes.
+
+2. `Optimal` (recommended)
+	- Balanced everyday profile for debloat, privacy, and responsiveness.
+	- Intended for most personal systems.
+
+3. `Aggressive`
+	- Wider repair/tuning coverage and deeper policy hardening.
+	- Longer runtime and stronger impact warnings.
+
+Preset selection also sets optimisation depth (`minimal`, `optimal`, `aggressive`) for profile-driven deep tuning during automated runs.
+
+## Windows AI Disable Option
+
+When enabled, the tool applies policy/configuration changes to disable AI-related Windows surfaces, including Copilot- and cloud-assisted AI/search paths where supported by the host build and policy scope.
+
+This option is explicitly optional and can be left off.
+
+## Custom Script Area
+
+`Scripts/CustomChanges.ps1` is provided for bespoke local changes and testing.
+
+If you add custom workflows, ensure they are wired into the main launcher UI if you want them exposed to end users.
+
+## Credits
+
+- PowerShell: https://docs.microsoft.com/en-us/powershell/
+- DelProf2 by Helge Klein: https://helgeklein.com/free-tools/delprof2-user-profile-deletion-tool/
+
+## Licence
+
+This repository is licensed under GNU terms as provided in the project licence file.
