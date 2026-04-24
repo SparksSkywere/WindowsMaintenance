@@ -1243,14 +1243,14 @@ $Scripts = @{
     })
 
     SystemOptimisation = [scriptblock]::Create({
-        # Run the System Optimization script directly
+        # Run the System Optimisation script directly
         $scriptPath = $scriptPaths.SystemOptimisation
         if (Test-Path $scriptPath) {
             & $scriptPath
         } else {
-            Write-Host "System Optimization script not found: $scriptPath" -ForegroundColor Red
+            Write-Host "System Optimisation script not found: $scriptPath" -ForegroundColor Red
             [System.Windows.Forms.MessageBox]::Show(
-                "System Optimization script not found: $scriptPath",
+                "System Optimisation script not found: $scriptPath",
                 'Windows Maintenance - Error',
                 'OK',
                 'Error'
@@ -1470,11 +1470,11 @@ function Add-MaintenanceButton {
     # Add click handler based on button type
     $buttonText = $Text
     $buttonAction = $Action
-    if ($Text -eq "Performance Optimization") {
-        # Special handler for System Optimization that shows a form
+    if ($Text -eq "Performance Optimisation") {
+        # Special handler for System Optimisation that shows a form
         $Button.Add_Click({
             try {
-                Write-Host "Starting System Optimization..." -ForegroundColor Cyan
+                Write-Host "Starting System Optimisation..." -ForegroundColor Cyan
                 # Hide the main form temporarily to avoid modal dialog conflicts
                 $Form.Visible = $false
                 & $refreshUi -Control $Form
@@ -1485,9 +1485,9 @@ function Add-MaintenanceButton {
                 $Form.Activate()
                 & $refreshUi -Control $Form
             } catch {
-                Write-Host "Error in System Optimization: $_" -ForegroundColor Red
+                Write-Host "Error in System Optimisation: $_" -ForegroundColor Red
                 [System.Windows.Forms.MessageBox]::Show(
-                    "Error during System Optimization: $($_.Exception.Message)",
+                    "Error during System Optimisation: $($_.Exception.Message)",
                     'Windows Maintenance - Error',
                     'OK',
                     'Error'
@@ -1651,7 +1651,7 @@ Add-MaintenanceButton "System File Check" (New-Object System.Drawing.Point($midd
 $currentY += 70
 
 # Disk Maintenance Section  
-Add-SectionLabel "Disk Maintenance and Optimization" (New-Object System.Drawing.Point(30, $currentY))
+Add-SectionLabel "Disk Maintenance and Optimisation" (New-Object System.Drawing.Point(30, $currentY))
 $currentY += 30
 
 Add-MaintenanceButton "System Cleaner" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $Scripts.WindowsCleaner "Repair" "Remove temporary files, update residue, and routine cache clutter to recover space and reduce churn." -Column 0
@@ -1664,7 +1664,7 @@ Add-SectionLabel "Advanced System Tools" (New-Object System.Drawing.Point(30, $c
 $currentY += 30
 
 Add-MaintenanceButton "System Troubleshooting" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $Scripts.WindowsTroubleshooting "Advanced" "Run guided remediation for common networking, update, Store, and policy-related faults." -Column 0
-Add-MaintenanceButton "Performance Optimization" (New-Object System.Drawing.Point($middleButtonX, $currentY)) $Scripts.SystemOptimisation "Advanced" "Open the dedicated optimisation panel with grouped privacy, performance, services, and recovery controls." -Column 1
+Add-MaintenanceButton "Performance Optimisation" (New-Object System.Drawing.Point($middleButtonX, $currentY)) $Scripts.SystemOptimisation "Advanced" "Open the dedicated optimisation panel with grouped privacy, performance, services, and recovery controls." -Column 1
 $currentY += 70
 
 # Special Operations Section
@@ -1726,16 +1726,16 @@ function Show-CompleteSetupPlanner {
         @{ Id = 'WindowsCleaner'; Name = 'System Cleaner'; Default = $true; Description = 'Cleans temp files, caches, and routine system clutter. This is low risk and usually worth leaving on.'; Impact = 'Improves free space and removes temporary junk.' }
         @{ Id = 'UserCleaner'; Name = 'User Profile Temp Cleaner'; Default = $false; Description = 'Runs the legacy user-cleaner utility for deeper user-temp locations and local profile cleanup actions.'; Impact = 'Can free extra profile space, but is more aggressive than standard cleaner routines.' }
         @{ Id = 'DelProf'; Name = 'Delete Old User Profiles'; Default = $false; Description = 'Deletes old user profiles to reclaim disk space. Keep this off on shared PCs unless you are sure the profiles are no longer needed.'; Impact = 'Useful for lab or hand-me-down machines, but not recommended on shared personal PCs.' }
-        @{ Id = 'VisualOptimisation'; Name = 'Visual Optimisation'; Default = $false; Description = 'Runs the standalone visual optimisation script. This is now separate from System Optimization so visual changes are only applied when explicitly selected.'; Impact = 'Include only when you want animation/theme visual tuning applied as part of Complete PC Setup.' }
-        @{ Id = 'SystemOptimisation'; Name = 'System Optimization'; Default = $true; Description = 'Applies the balanced optimization set for performance, privacy, and lower idle RAM usage without stripping core Windows functionality.'; Impact = 'This is the main tuning step for responsiveness and privacy.' }
+        @{ Id = 'VisualOptimisation'; Name = 'Visual Optimisation'; Default = $false; Description = 'Runs the standalone visual optimisation script. This is now separate from System Optimisation so visual changes are only applied when explicitly selected.'; Impact = 'Include only when you want animation/theme visual tuning applied as part of Complete PC Setup.' }
+        @{ Id = 'SystemOptimisation'; Name = 'System Optimisation'; Default = $true; Description = 'Applies the balanced optimisation set for performance, privacy, and lower idle RAM usage without stripping core Windows functionality.'; Impact = 'This is the main tuning step for responsiveness and privacy.' }
         @{ Id = 'FixWindowsDefender'; Name = 'Fix Windows Defender'; Default = $false; Description = 'Runs Defender remediation and policy repair routines to restore core protection features when they are disabled or damaged.'; Impact = 'Helpful on systems where Defender is broken or blocked by old AV remnants.' }
-        @{ Id = 'WindowsTroubleshooting'; Name = 'Windows Troubleshooting'; Default = $false; Description = 'Runs the troubleshooting module with guided fixes for common network, update, and Store problems.'; Impact = 'Useful for problem PCs, not required for a routine optimization pass.' }
+        @{ Id = 'WindowsTroubleshooting'; Name = 'Windows Troubleshooting'; Default = $false; Description = 'Runs the troubleshooting module with guided fixes for common network, update, and Store problems.'; Impact = 'Useful for problem PCs, not required for a routine optimisation pass.' }
         @{ Id = 'CustomChanges'; Name = 'Custom Changes Panel'; Default = $false; Description = 'Opens the custom changes panel for optional manual tweak flows beyond the standard preset path.'; Impact = 'For power users who want extra manual controls after the baseline setup.' }
         @{ Id = 'ApplyAeroliteTheme'; Name = 'Apply Aerolite Theme'; Default = $false; Description = 'Launches the bundled Aerolite theme file so you can switch visual style as part of final setup.'; Impact = 'Cosmetic change only; does not alter performance/security settings.' }
         @{ Id = 'DISMRestore'; Name = 'DISM Health Check'; Default = $false; Description = 'Checks the Windows component store and repairs corruption when found. Helpful on damaged systems, but slower than the default recommended set.'; Impact = 'Good for machines with update or image-health issues.' }
         @{ Id = 'SFCRepair'; Name = 'System File Check'; Default = $false; Description = 'Scans protected system files and repairs corruption. Useful when Windows components behave oddly, but not necessary for every setup run.'; Impact = 'Adds repair coverage at the cost of runtime.' }
         @{ Id = 'DiskCheck'; Name = 'Disk Check and Repair'; Default = $false; Description = 'Checks the file system for disk issues. This can take time and may schedule work for reboot on busy volumes.'; Impact = 'Only include when storage issues are suspected.' }
-        @{ Id = 'Defrag'; Name = 'Disk Defragmentation'; Default = $false; Description = 'Runs the disk optimization script. Best for HDD systems; SSD-aware logic remains in the script, but this is still optional.'; Impact = 'Useful for older spinning disks, usually unnecessary for SSD-focused setups.' }
+        @{ Id = 'Defrag'; Name = 'Disk Defragmentation'; Default = $false; Description = 'Runs the disk optimisation script. Best for HDD systems; SSD-aware logic remains in the script, but this is still optional.'; Impact = 'Useful for older spinning disks, usually unnecessary for SSD-focused setups.' }
     )
 
     $taskLookup = @{}
@@ -1746,11 +1746,11 @@ function Show-CompleteSetupPlanner {
     $presetDefinitions = @(
         @{
             Name = 'Minimal'
-            Description = 'Fastest and safest preset. Keeps the setup light and focuses on cleanup plus balanced optimization.'
-            Disclaimer = 'Minimal selects only the core cleanup and optimization steps. It avoids extra repair scans, disk checks, and more opinionated removals so the machine stays familiar and usable.'
+            Description = 'Fastest and safest preset. Keeps the setup light and focuses on cleanup plus balanced optimisation.'
+            Disclaimer = 'Minimal selects only the core cleanup and optimisation steps. It avoids extra repair scans, disk checks, and more opinionated removals so the machine stays familiar and usable.'
             Tasks = @('WindowsCleaner', 'SystemOptimisation')
             DisableAI = $false
-            OptimizationProfile = 'minimal'
+            OptimisationProfile = 'minimal'
             AccentColor = [System.Drawing.Color]::FromArgb(231, 242, 255)
             BorderColor = [System.Drawing.Color]::FromArgb(170, 198, 228)
             TextColor = $UiPalette.TextPrimary
@@ -1758,10 +1758,10 @@ function Show-CompleteSetupPlanner {
         @{
             Name = 'Optimal'
             Description = 'Recommended balanced preset for most PCs.'
-            Disclaimer = 'Optimal is the recommended preset. It includes debloat, cleaner, OneDrive removal, and balanced optimization focused on performance, lower idle RAM, and privacy without stripping core Windows UX.'
+            Disclaimer = 'Optimal is the recommended preset. It includes debloat, cleaner, OneDrive removal, and balanced optimisation focused on performance, lower idle RAM, and privacy without stripping core Windows UX.'
             Tasks = @('WindowsInstallCleanup', 'WindowsUninstallOneDrive', 'WindowsCleaner', 'SystemOptimisation')
             DisableAI = $false
-            OptimizationProfile = 'optimal'
+            OptimisationProfile = 'optimal'
             AccentColor = $UiPalette.AccentSoft
             BorderColor = $UiPalette.Border
             TextColor = $UiPalette.TextPrimary
@@ -1772,7 +1772,7 @@ function Show-CompleteSetupPlanner {
             Disclaimer = 'Aggressive enables extra repair and maintenance steps, adds the Windows AI disable option, and may take much longer to finish. It is still kept short of destructive malware-style debloat, but it is the heaviest preset in this tool.'
             Tasks = @('WindowsInstallCleanup', 'WindowsUninstallOneDrive', 'WindowsCleaner', 'SystemOptimisation', 'DISMRestore', 'SFCRepair', 'DiskCheck', 'Defrag')
             DisableAI = $true
-            OptimizationProfile = 'aggressive'
+            OptimisationProfile = 'aggressive'
             AccentColor = [System.Drawing.Color]::FromArgb(255, 230, 230)
             BorderColor = [System.Drawing.Color]::FromArgb(210, 70, 70)
             TextColor = [System.Drawing.Color]::FromArgb(130, 18, 18)
@@ -1986,7 +1986,7 @@ function Show-CompleteSetupPlanner {
     $plannerForm.CancelButton = $cancelButton
 
     $presetButtons = @{}
-    $selectedOptimizationProfile = 'optimal'
+    $selectedOptimisationProfile = 'optimal'
 
     function Apply-SetupPreset {
         param([Parameter(Mandatory)][string]$PresetName)
@@ -1996,7 +1996,7 @@ function Show-CompleteSetupPlanner {
         }
 
         $preset = $presetLookup[$PresetName]
-        $selectedOptimizationProfile = if ($preset.ContainsKey('OptimizationProfile')) { [string]$preset.OptimizationProfile } else { 'optimal' }
+        $selectedOptimisationProfile = if ($preset.ContainsKey('OptimisationProfile')) { [string]$preset.OptimisationProfile } else { 'optimal' }
 
         for ($i = 0; $i -lt $checkedTasks.Items.Count; $i++) {
             $taskName = [string]$checkedTasks.Items[$i]
@@ -2123,7 +2123,7 @@ function Show-CompleteSetupPlanner {
             Confirmed = $true
             SelectedTaskIds = $selectedTaskIds
             DisableAI = $aiCheckbox.Checked
-            OptimizationProfile = $selectedOptimizationProfile
+            OptimisationProfile = $selectedOptimisationProfile
         }
         $plannerForm.DialogResult = [System.Windows.Forms.DialogResult]::OK
         $plannerForm.Close()
@@ -2226,7 +2226,7 @@ function Start-AutomatedMaintenance {
         [switch]$ScheduleMode,
         [string[]]$SelectedTaskIds,
         [switch]$DisableAI,
-        [string]$OptimizationProfile = 'optimal'
+        [string]$OptimisationProfile = 'optimal'
     )
 
     try {
@@ -2247,14 +2247,14 @@ function Start-AutomatedMaintenance {
         Show-ProgressDialog -Status "Initialising Complete PC Setup sequence..." -Indeterminate
         & $refreshUi -Control $Global:MainProgressForm
 
-        if ([string]::IsNullOrWhiteSpace($OptimizationProfile)) {
-            $OptimizationProfile = 'optimal'
+        if ([string]::IsNullOrWhiteSpace($OptimisationProfile)) {
+            $OptimisationProfile = 'optimal'
         } else {
-            $OptimizationProfile = $OptimizationProfile.ToLowerInvariant()
+            $OptimisationProfile = $OptimisationProfile.ToLowerInvariant()
         }
 
-        if ($OptimizationProfile -notin @('minimal', 'optimal', 'aggressive')) {
-            $OptimizationProfile = 'optimal'
+        if ($OptimisationProfile -notin @('minimal', 'optimal', 'aggressive')) {
+            $OptimisationProfile = 'optimal'
         }
 
         $resolvedScriptPaths = @{
@@ -2293,16 +2293,16 @@ function Start-AutomatedMaintenance {
             return ($child.ExitCode -eq 0)
         }
 
-        $systemOptimizationArguments = @('--automated', '--profile', $OptimizationProfile)
+        $systemOptimisationArguments = @('--automated', '--profile', $OptimisationProfile)
         if ($DisableAI) {
-            $systemOptimizationArguments += '--disable-ai'
+            $systemOptimisationArguments += '--disable-ai'
         }
 
-        $systemOptimizationTask = {
-            & $runExternalScript -ScriptPath $resolvedScriptPaths.SystemOptimisation -ArgumentList $systemOptimizationArguments
+        $systemOptimisationTask = {
+            & $runExternalScript -ScriptPath $resolvedScriptPaths.SystemOptimisation -ArgumentList $systemOptimisationArguments
         }.GetNewClosure()
 
-        $visualOptimizationTask = {
+        $visualOptimisationTask = {
             & $runExternalScript -ScriptPath $resolvedScriptPaths.VisualOptimisation -ArgumentList @('--automated')
         }.GetNewClosure()
 
@@ -2345,8 +2345,8 @@ function Start-AutomatedMaintenance {
             @{ Id = 'WindowsCleaner'; Name = 'System File Cleanup'; Script = $Scripts.WindowsCleaner; Weight = 10; Default = $true }
             @{ Id = 'UserCleaner'; Name = 'User Profile Temp Cleaner'; Script = $userCleanerTask; Weight = 8; Default = $false }
             @{ Id = 'DelProf'; Name = 'Delete User Profiles'; Script = $Scripts.DelProf; Weight = 8; Default = $false }
-            @{ Id = 'VisualOptimisation'; Name = 'Visual Optimisation'; Script = $visualOptimizationTask; Weight = 8; Default = $false }
-            @{ Id = 'SystemOptimisation'; Name = 'System Optimization'; Script = $systemOptimizationTask; Weight = 18; Default = $true }
+            @{ Id = 'VisualOptimisation'; Name = 'Visual Optimisation'; Script = $visualOptimisationTask; Weight = 8; Default = $false }
+            @{ Id = 'SystemOptimisation'; Name = 'System Optimisation'; Script = $systemOptimisationTask; Weight = 18; Default = $true }
             @{ Id = 'FixWindowsDefender'; Name = 'Fix Windows Defender'; Script = $fixDefenderTask; Weight = 12; Default = $false }
             @{ Id = 'WindowsTroubleshooting'; Name = 'Windows Troubleshooting'; Script = $troubleshootingTask; Weight = 8; Default = $false }
             @{ Id = 'CustomChanges'; Name = 'Custom Changes Panel'; Script = $customChangesTask; Weight = 6; Default = $false }
@@ -2416,7 +2416,7 @@ Add-MaintenanceButton "Complete PC Setup" (New-Object System.Drawing.Point($left
     $setupPlan = Show-CompleteSetupPlanner
 
     if ($setupPlan -and $setupPlan.Confirmed) {
-        Start-AutomatedMaintenance -SelectedTaskIds $setupPlan.SelectedTaskIds -DisableAI:$setupPlan.DisableAI -OptimizationProfile $setupPlan.OptimizationProfile
+        Start-AutomatedMaintenance -SelectedTaskIds $setupPlan.SelectedTaskIds -DisableAI:$setupPlan.DisableAI -OptimisationProfile $setupPlan.OptimisationProfile
     }
 } "Special" "Open the guided planner to run a full setup sequence with preset profiles, detailed task explanations, and optional AI disablement." -Column 0
 
