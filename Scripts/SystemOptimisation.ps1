@@ -27,6 +27,8 @@ if ($OptimizationProfile -notin @("minimal", "optimal", "aggressive")) {
     $OptimizationProfile = "optimal"
 }
 
+$VisualOptimisationScript = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "VisualOptimisation.ps1"
+
 # Progress reporting functions for integration with main script
 function Show-Progress {
     param([string]$Status, [int]$Percent = -1)
@@ -98,73 +100,6 @@ function Safe-Execute {
     } catch {
         Write-Host "Error during $Description : $_" -ForegroundColor Red
     }
-}
-
-# Functions for various optimizations with error handling
-function VisualFXSetting {
-    Safe-Execute { Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -Value 2 -Force } "VisualFXSetting"
-}
-
-function MinAnimate {
-    Safe-Execute {
-        if (-not (Test-Path "HKCU:\Control Panel\Desktop\WindowMetrics")) {
-            Write-Host "Error: Path HKCU:\Control Panel\Desktop\WindowMetrics does not exist." -ForegroundColor Red
-            return
-        }
-        Set-ItemProperty -Path "HKCU:\Control Panel\Desktop\WindowMetrics" -Name "MinAnimate" -Value 0 -Force
-    } "MinAnimate"
-}
-
-function TaskbarAnimations {
-    Safe-Execute { Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarAnimations" -Value 0 -Force } "TaskbarAnimations"
-}
-
-function TaskbarAnimations2 {
-    Safe-Execute { Set-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarAnimations" -Value 0 -Force } "TaskbarAnimations2"
-}
-
-function CompositionPolicy {
-    Safe-Execute { Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\DWM" -Name "CompositionPolicy" -Value 0 -Force } "CompositionPolicy"
-}
-
-function ColorizationOpaqueBlend {
-    Safe-Execute { Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\DWM" -Name "ColorizationOpaqueBlend" -Value 0 -Force } "ColorizationOpaqueBlend"
-}
-
-function AlwaysHibernateThumbnails {
-    Safe-Execute { Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\DWM" -Name "AlwaysHibernateThumbnails" -Value 0 -Force } "AlwaysHibernateThumbnails"
-}
-
-function DisableThumbnails {
-    Safe-Execute { Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\DWM" -Name "DisableThumbnails" -Value 1 -Force } "DisableThumbnails"
-}
-
-function ListviewAlphaSelect {
-    Safe-Execute { Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "ListviewAlphaSelect" -Value 0 -Force } "ListviewAlphaSelect"
-}
-
-function DragFullWindows {
-    Safe-Execute { Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "DragFullWindows" -Value 0 -Force } "DragFullWindows"
-}
-
-function FontSmoothing {
-    Safe-Execute { Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "FontSmoothing" -Value 0 -Force } "FontSmoothing"
-}
-
-function ThemeManager {
-    Safe-Execute { Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\ThemeManager" -Name "ThemeActive" -Value 0 -Force } "ThemeManager"
-}
-
-function ThemeManager2 {
-    Safe-Execute { Set-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\ThemeManager" -Name "ThemeActive" -Value 0 -Force } "ThemeManager2"
-}
-
-function UserPreferencesMask {
-    Safe-Execute { Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "UserPreferencesMask" -Value ([byte[]](0x90,0x12,0x01,0x80,0x10,0x00,0x00,0x00)) -Force } "UserPreferencesMask"
-}
-
-function RestartThemeService {
-    Safe-Execute { Restart-Service Themes -Force } "RestartThemeService"
 }
 
 # Telemetry and background services optimization functions - Modern Windows 10/11
@@ -465,25 +400,6 @@ function Disable-WindowsDefenderRealTime {
         Set-ItemProperty -Path $regPath -Name "DisableRealtimeMonitoring" -Value 1 -Force
         
     } "Disable-WindowsDefenderRealTime"
-}
-
-function Optimize-VisualEffectsAdvanced {
-    Safe-Execute {
-        # Additional visual effects optimizations
-        $regPath = "HKCU:\Control Panel\Desktop"
-        Set-ItemProperty -Path $regPath -Name "MenuShowDelay" -Value "0" -Force
-        
-        # Disable window animations
-        $regPath2 = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
-        Set-ItemProperty -Path $regPath2 -Name "TaskbarAnimations" -Value 0 -Force
-        Set-ItemProperty -Path $regPath2 -Name "ListviewAlphaSelect" -Value 0 -Force
-        
-        # System-wide performance settings
-        $regPath3 = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects"
-        if (-not (Test-Path $regPath3)) { New-Item -Path $regPath3 -Force | Out-Null }
-        Set-ItemProperty -Path $regPath3 -Name "VisualFXSetting" -Value 2 -Force
-        
-    } "Optimize-VisualEffectsAdvanced"
 }
 
 function Disable-WindowsAI {
@@ -982,15 +898,19 @@ function Optimize-AdditionalServices {
             @{ Name = "SharedAccess";    Label = "Internet Connection Sharing" },
             @{ Name = "PhoneSvc";        Label = "Phone Service (mobile hotspot integration)" },
             @{ Name = "PcaSvc";          Label = "Program Compatibility Assistant" },
-            @{ Name = "WerSvc";          Label = "Windows Error Reporting" },
-            @{ Name = "wercplsupport";   Label = "WER Control Panel Support" },
+            @{ Name = "WerSvc";          Label = "Windows Error Reporting (diagnostic data)" },
+            @{ Name = "wercplsupport";   Label = "WER Control Panel Support (diagnostic)" },
             @{ Name = "stisvc";          Label = "Windows Image Acquisition (scanner/camera)" },
             @{ Name = "WiaRpc";          Label = "Windows Image Acquisition RPC" },
             @{ Name = "SCardSvr";        Label = "Smart Card (disable if no smart card reader)" },
             @{ Name = "ScDeviceEnum";    Label = "Smart Card Device Enumeration" },
             @{ Name = "icssvc";          Label = "Wi-Fi Tethering/Hotspot service" },
             @{ Name = "WbioSrvc";        Label = "Windows Biometric (disable if no fingerprint/Hello)" },
-            @{ Name = "WMPNetworkSvc";   Label = "Windows Media Player Network Sharing" }
+            @{ Name = "WMPNetworkSvc";   Label = "Windows Media Player Network Sharing" },
+            @{ Name = "DoSvc";           Label = "Delivery Optimization (peer-to-peer updates - not needed on single PC)" },
+            @{ Name = "InventorySvc";    Label = "Inventory and Compatibility Appraisal (telemetry)" },
+            @{ Name = "NPSMSvc";         Label = "Now Playing Session Manager (media telemetry)" },
+            @{ Name = "whesvc";          Label = "Windows Health and Optimized Experiences (telemetry/diagnostics)" }
         )
 
         foreach ($svc in $servicesToDisable) {
@@ -1001,6 +921,26 @@ function Optimize-AdditionalServices {
                 Write-Host "  Disabled: $($svc.Label)" -ForegroundColor Green
             } else {
                 Write-Host "  Not found: $($svc.Label)" -ForegroundColor DarkGray
+            }
+        }
+
+        # Disable user-suffixed services (cloud sync and notification services)
+        # These services have SID-based suffixes and need wildcard matching
+        $userSuffixedServices = @(
+            @{ Pattern = "OneSyncSvc*";      Label = "Sync Host (cloud sync services)" },
+            @{ Pattern = "cbdhsvc*";         Label = "Clipboard User Service (cloud clipboard sync)" },
+            @{ Pattern = "NPSMSvc*";         Label = "Now Playing Session Manager (media telemetry)" },
+            @{ Pattern = "WpnUserService*";  Label = "Windows Push Notifications User Service" }
+        )
+
+        foreach ($svcPattern in $userSuffixedServices) {
+            $matchedServices = Get-Service -Name $svcPattern.Pattern -ErrorAction SilentlyContinue
+            if ($matchedServices) {
+                foreach ($svc in $matchedServices) {
+                    Stop-Service -Name $svc.Name -Force -ErrorAction SilentlyContinue
+                    Set-Service -Name $svc.Name -StartupType Disabled -ErrorAction SilentlyContinue
+                    Write-Host "  Disabled: $($svcPattern.Label) [$($svc.Name)]" -ForegroundColor Green
+                }
             }
         }
 
@@ -1045,12 +985,24 @@ function Optimize-RAMFootprint {
         }
 
         # Disable additional always-on services that commonly consume RAM on idle systems.
-        $extraServices = @("DiagTrack", "dmwappushservice", "MapsBroker", "lfsvc", "WMPNetworkSvc")
+        $extraServices = @("DiagTrack", "dmwappushservice", "MapsBroker", "lfsvc", "WMPNetworkSvc", "DoSvc", "InventorySvc", "whesvc", "DPS", "WdiSystemHost")
         foreach ($svc in $extraServices) {
             $service = Get-Service -Name $svc -ErrorAction SilentlyContinue
             if ($service) {
                 Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue
                 Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue
+            }
+        }
+
+        # Disable user-suffixed cloud/notification services that consume RAM
+        $userSuffixedRAMServices = @("OneSyncSvc*", "cbdhsvc*", "WpnUserService*")
+        foreach ($svcPattern in $userSuffixedRAMServices) {
+            $matchedServices = Get-Service -Name $svcPattern -ErrorAction SilentlyContinue
+            if ($matchedServices) {
+                foreach ($svc in $matchedServices) {
+                    Stop-Service -Name $svc.Name -Force -ErrorAction SilentlyContinue
+                    Set-Service -Name $svc.Name -StartupType Disabled -ErrorAction SilentlyContinue
+                }
             }
         }
 
@@ -1245,24 +1197,7 @@ function Revert-Optimizations {
 if ($AutomatedMode) {
     # Run all optimizations automatically with progress reporting
     Show-Progress "Starting system optimization..." 0
-    
-    # Visual effects optimizations
-    Show-Progress "Optimizing visual effects..." 10
-    VisualFXSetting
-    MinAnimate
-    TaskbarAnimations
-    TaskbarAnimations2
-    CompositionPolicy
-    ColorizationOpaqueBlend
-    AlwaysHibernateThumbnails
-    DisableThumbnails
-    ListviewAlphaSelect
-    DragFullWindows
-    FontSmoothing
-    ThemeManager
-    ThemeManager2
-    UserPreferencesMask
-    RestartThemeService
+    Show-Progress "Starting automated profile without visual optimisation..." 10
     
     # Telemetry and services
     Show-Progress "Disabling telemetry and unnecessary services..." 30
@@ -1287,7 +1222,6 @@ if ($AutomatedMode) {
     Optimize-PowerSettings
     Optimize-NetworkSettings
     Optimize-MemoryManagement
-    Optimize-VisualEffectsAdvanced
     
     # Service optimizations
     Show-Progress "Optimizing system services..." 80
@@ -1343,27 +1277,17 @@ if ($AutomatedMode) {
 }
 
 # Scripts to optimize Windows with detailed action descriptions
-$ReducedTheme = {
+$VisualOptimisation = {
     try {
-        Write-Host "Starting Reduced Theme Optimization..." -ForegroundColor Cyan
-        VisualFXSetting
-        MinAnimate
-        TaskbarAnimations
-        TaskbarAnimations2
-        CompositionPolicy
-        ColorizationOpaqueBlend
-        AlwaysHibernateThumbnails
-        DisableThumbnails
-        ListviewAlphaSelect
-        DragFullWindows
-        FontSmoothing
-        ThemeManager
-        ThemeManager2
-        UserPreferencesMask
-        RestartThemeService
+        Write-Host "Starting Visual Optimisation..." -ForegroundColor Cyan
+        if (Test-Path $VisualOptimisationScript) {
+            & $VisualOptimisationScript --automated
+        } else {
+            throw "Visual optimisation script not found at $VisualOptimisationScript"
+        }
         ExecutionCompleted
     } catch {
-        Write-Host "Error during Reduced Theme Optimization: $_" -ForegroundColor Red
+        Write-Host "Error during Visual Optimisation: $_" -ForegroundColor Red
     }
 }
 
@@ -1415,7 +1339,6 @@ $PerformanceOptimizations = {
         Optimize-PowerSettings
         Optimize-NetworkSettings
         Optimize-MemoryManagement
-        Optimize-VisualEffectsAdvanced
         
         # Disable Superfetch/SysMain (Windows 10/11)
         $sysmainService = Get-Service "SysMain" -ErrorAction SilentlyContinue
@@ -1610,7 +1533,7 @@ $DoallAbove = {
             "Question"
         )
 
-        & $ReducedTheme
+        & $VisualOptimisation
         & $Turnoffbackgroundapps
         & $DisableServices
         & $DisableTelemetry
@@ -1889,7 +1812,7 @@ $currentY = 185
 Add-OptimizationSection "Balanced Defaults" (New-Object System.Drawing.Point(20, $currentY))
 $currentY += 28
 
-Add-OptimizationButton "Performance Theme" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $ReducedTheme "Visual" "Reduce visual effects and animations to improve responsiveness on lower-spec systems."
+Add-OptimizationButton "Visual Optimisation" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $VisualOptimisation "Visual" "Apply all visual performance changes in one pass (animations, effects, and theme responsiveness tweaks)."
 Add-OptimizationButton "Disable Background Apps" (New-Object System.Drawing.Point($rightButtonX, $currentY)) $Turnoffbackgroundapps "Services" "Restrict background app activity to lower idle CPU/RAM usage and reduce passive network traffic."
 $currentY += 50
 

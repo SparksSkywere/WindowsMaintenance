@@ -100,6 +100,7 @@ $scriptPaths = @{
     DiskCheck = Join-Path $ScriptRoot "Scripts\windowsrepairvolume.ps1"
     Troubleshooting = Join-Path $ScriptRoot "Scripts\troubleshooting.ps1"
     SystemOptimisation = Join-Path $ScriptRoot "Scripts\SystemOptimisation.ps1"
+    VisualOptimisation = Join-Path $ScriptRoot "Scripts\VisualOptimisation.ps1"
     UserCleaner = Join-Path $ScriptRoot "Scripts\UserCleaner.ps1"
     DefenderFix = Join-Path $ScriptRoot "Scripts\Fix-Windows-Defender.ps1"
     CustomChanges = Join-Path $ScriptRoot "Scripts\CustomChanges.ps1"
@@ -513,24 +514,31 @@ $Scripts = @{
             
             # Create selection dialog
             Show-ProgressDialog -Status "Building app selection dialog..." -Indeterminate
+
+            $workArea = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+            $dialogWidth = [Math]::Min(920, [Math]::Max(760, [int]($workArea.Width * 0.72)))
+            $dialogHeight = [Math]::Min(860, [Math]::Max(680, [int]($workArea.Height * 0.82)))
             
             $selectionForm = New-Object System.Windows.Forms.Form
             $selectionForm.Text = "Select Apps to Remove"
-            $selectionForm.Size = New-Object System.Drawing.Size(700, 700)
+            $selectionForm.Size = New-Object System.Drawing.Size($dialogWidth, $dialogHeight)
             $selectionForm.StartPosition = "CenterScreen"
-            $selectionForm.FormBorderStyle = "FixedDialog"
-            $selectionForm.MaximizeBox = $false
+            $selectionForm.FormBorderStyle = "Sizable"
+            $selectionForm.MaximizeBox = $true
             $selectionForm.MinimizeBox = $false
             $selectionForm.Font = New-Object System.Drawing.Font("Segoe UI", 9)
             $selectionForm.TopMost = $true
+            $selectionForm.MinimumSize = New-Object System.Drawing.Size(760, 680)
+            $selectionForm.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::Dpi
             
             # Header label
             $headerLabel = New-Object System.Windows.Forms.Label
             $headerLabel.Location = New-Object System.Drawing.Point(10, 10)
-            $headerLabel.Size = New-Object System.Drawing.Size(660, 40)
+            $headerLabel.Size = New-Object System.Drawing.Size(($selectionForm.ClientSize.Width - 20), 40)
             $headerLabel.Text = "Select Microsoft apps to remove from this profile. Core Windows shell and security components are excluded from this list for safety."
             $headerLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
             $headerLabel.ForeColor = [System.Drawing.Color]::DarkRed
+            $headerLabel.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
             $selectionForm.Controls.Add($headerLabel)
             
             # Select All / Deselect All buttons
@@ -562,21 +570,69 @@ $Scripts = @{
             $searchBox = New-Object System.Windows.Forms.TextBox
             $searchBox.Location = New-Object System.Drawing.Point(500, 57)
             $searchBox.Size = New-Object System.Drawing.Size(180, 25)
+            $searchBox.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Right
             $selectionForm.Controls.Add($searchBox)
+
+            $coreAppxLegend = New-Object System.Windows.Forms.Label
+            $coreAppxLegend.Location = New-Object System.Drawing.Point(360, 60)
+            $coreAppxLegend.Size = New-Object System.Drawing.Size(220, 20)
+            $coreAppxLegend.Text = "[CORE APPX - USE CAUTION]"
+            $coreAppxLegend.ForeColor = [System.Drawing.Color]::FromArgb(185, 28, 28)
+            $coreAppxLegend.Font = New-Object System.Drawing.Font("Segoe UI", 8.5, [System.Drawing.FontStyle]::Bold)
+            $coreAppxLegend.TextAlign = [System.Drawing.ContentAlignment]::MiddleRight
+            $coreAppxLegend.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Right
+            $selectionForm.Controls.Add($coreAppxLegend)
             
             # CheckedListBox for apps
             $checkedListBox = New-Object System.Windows.Forms.CheckedListBox
             $checkedListBox.Location = New-Object System.Drawing.Point(10, 95)
-            $checkedListBox.Size = New-Object System.Drawing.Size(660, 480)
+            $checkedListBox.Size = New-Object System.Drawing.Size(($selectionForm.ClientSize.Width - 20), ($selectionForm.ClientSize.Height - 190))
             $checkedListBox.CheckOnClick = $true
+            $checkedListBox.HorizontalScrollbar = $true
+            $checkedListBox.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
             $selectionForm.Controls.Add($checkedListBox)
+
+            $coreWarningPatterns = @(
+                "MicrosoftWindows.Client.CBS",
+                "Windows.CBSPreview",
+                "MicrosoftWindows.Client.Core",
+                "Microsoft.Windows.ShellExperienceHost",
+                "Microsoft.Windows.StartMenuExperienceHost",
+                "MicrosoftWindows.Client.OOBE",
+                "MicrosoftWindows.Client.Photon",
+                "MicrosoftWindows.Client.CoreAI"
+            )
+
+            function Test-CoreAppxCandidate {
+                param(
+                    [string]$AppName,
+                    [string]$PackageFamilyName
+                )
+
+                foreach ($pattern in $coreWarningPatterns) {
+                    if ($AppName -like "$pattern*" -or $PackageFamilyName -like "$pattern*") {
+                        return $true
+                    }
+                }
+
+                return $false
+            }
             
             # Add apps to the list
             $allApps = @()
             foreach ($app in $installedApps) {
+                $isCoreWarning = Test-CoreAppxCandidate -AppName $app.Name -PackageFamilyName $app.PackageFamilyName
+                $baseDisplay = "$($app.Name) - v$($app.Version)"
+                $displayText = if ($isCoreWarning) {
+                    "$baseDisplay    [CORE APPX - USE CAUTION]"
+                } else {
+                    $baseDisplay
+                }
+
                 $appInfo = @{
-                    DisplayText = "$($app.Name) - v$($app.Version)"
+                    DisplayText = $displayText
                     App = $app
+                    IsCoreWarning = $isCoreWarning
                 }
                 $allApps += $appInfo
                 [void]$checkedListBox.Items.Add($appInfo.DisplayText, $false)  # Unchecked by default for safety
@@ -670,40 +726,51 @@ $Scripts = @{
             
             # Info label
             $infoLabel = New-Object System.Windows.Forms.Label
-            $infoLabel.Location = New-Object System.Drawing.Point(10, 585)
-            $infoLabel.Size = New-Object System.Drawing.Size(660, 20)
+            $infoLabel.Location = New-Object System.Drawing.Point(10, ($selectionForm.ClientSize.Height - 95))
+            $infoLabel.Size = New-Object System.Drawing.Size(($selectionForm.ClientSize.Width - 20), 20)
             $infoLabel.Text = "Found $($installedApps.Count) removable app packages on this device"
             $infoLabel.ForeColor = [System.Drawing.Color]::Gray
+            $infoLabel.Anchor = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
             $selectionForm.Controls.Add($infoLabel)
             
             # Warning label
             $warningLabel = New-Object System.Windows.Forms.Label
-            $warningLabel.Location = New-Object System.Drawing.Point(10, 605)
-            $warningLabel.Size = New-Object System.Drawing.Size(660, 20)
-            $warningLabel.Text = "WARNING: Any app removed here can be restored later using 'Reinstall Default Apps'."
+            $warningLabel.Location = New-Object System.Drawing.Point(10, ($selectionForm.ClientSize.Height - 75))
+            $warningLabel.Size = New-Object System.Drawing.Size(($selectionForm.ClientSize.Width - 20), 20)
+            $warningLabel.Text = "WARNING: [CORE APPX - USE CAUTION] entries may affect shell features. Removal is still allowed and can be restored later."
             $warningLabel.ForeColor = [System.Drawing.Color]::OrangeRed
             $warningLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Bold)
+            $warningLabel.Anchor = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
             $selectionForm.Controls.Add($warningLabel)
             
             # Remove button
             $removeBtn = New-Object System.Windows.Forms.Button
-            $removeBtn.Location = New-Object System.Drawing.Point(470, 630)
+            $removeBtn.Location = New-Object System.Drawing.Point(($selectionForm.ClientSize.Width - 210), ($selectionForm.ClientSize.Height - 40))
             $removeBtn.Size = New-Object System.Drawing.Size(100, 35)
             $removeBtn.Text = "Remove"
             $removeBtn.BackColor = [System.Drawing.Color]::IndianRed
             $removeBtn.ForeColor = [System.Drawing.Color]::White
             $removeBtn.DialogResult = [System.Windows.Forms.DialogResult]::OK
+            $removeBtn.Anchor = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Right
             $selectionForm.Controls.Add($removeBtn)
             $selectionForm.AcceptButton = $removeBtn
             
             # Cancel button
             $cancelBtn = New-Object System.Windows.Forms.Button
-            $cancelBtn.Location = New-Object System.Drawing.Point(580, 630)
+            $cancelBtn.Location = New-Object System.Drawing.Point(($selectionForm.ClientSize.Width - 100), ($selectionForm.ClientSize.Height - 40))
             $cancelBtn.Size = New-Object System.Drawing.Size(100, 35)
             $cancelBtn.Text = "Cancel"
             $cancelBtn.DialogResult = [System.Windows.Forms.DialogResult]::Cancel
+            $cancelBtn.Anchor = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Right
             $selectionForm.Controls.Add($cancelBtn)
             $selectionForm.CancelButton = $cancelBtn
+
+            $selectionForm.Add_Resize({
+                $searchLabel.Location = New-Object System.Drawing.Point(($selectionForm.ClientSize.Width - 240), 60)
+                $searchBox.Location = New-Object System.Drawing.Point(($selectionForm.ClientSize.Width - 180), 57)
+                $coreAppxLegend.Location = New-Object System.Drawing.Point(($selectionForm.ClientSize.Width - 420), 60)
+                $coreAppxLegend.Size = New-Object System.Drawing.Size(220, 20)
+            })
             
             # Show the selection dialog (modal dialog will be on top)
             $dialogResult = $selectionForm.ShowDialog()
@@ -1160,6 +1227,21 @@ $Scripts = @{
         }
 "@)
     
+    VisualOptimisation = [scriptblock]::Create({
+        $visualScriptPath = Join-Path $ScriptRoot "Scripts\VisualOptimisation.ps1"
+        if (Test-Path $visualScriptPath) {
+            & $visualScriptPath --automated
+        } else {
+            Write-Host "Visual Optimisation script not found: $visualScriptPath" -ForegroundColor Red
+            [System.Windows.Forms.MessageBox]::Show(
+                "Visual Optimisation script not found: $visualScriptPath",
+                'Windows Maintenance - Error',
+                'OK',
+                'Error'
+            )
+        }
+    })
+
     SystemOptimisation = [scriptblock]::Create({
         # Run the System Optimization script directly
         $scriptPath = $scriptPaths.SystemOptimisation
@@ -1341,10 +1423,12 @@ function Add-MaintenanceButton {
     # Calculate button width based on form size (3 buttons per row with symmetrical padding)
     # $buttonWidth is now calculated globally above
     
+    $dynamicButtonHeight = [Math]::Max(42, [int]([Math]::Ceiling($Form.Font.GetHeight() + 24)))
+
     $Button = New-Object System.Windows.Forms.Button -Property @{
         Text = $Text
         Location = $Location
-        Size = New-Object System.Drawing.Size($buttonWidth, 42)
+        Size = New-Object System.Drawing.Size($buttonWidth, $dynamicButtonHeight)
         Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
         FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
         Cursor = [System.Windows.Forms.Cursors]::Hand
@@ -1539,6 +1623,13 @@ $leftButtonX = 30
 $middleButtonX = $leftButtonX + $buttonWidth + 20
 $rightButtonX = $middleButtonX + $buttonWidth + 20
 
+# Quick Actions Section
+Add-SectionLabel "Quick Optimisations" (New-Object System.Drawing.Point(30, $currentY))
+$currentY += 30
+
+Add-MaintenanceButton "Visual Optimisation" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $Scripts.VisualOptimisation "Performance" "Apply all visual performance changes in one pass: disable animations, DWM effects, and theme overhead for responsiveness." -Column 0
+$currentY += 50
+
 # System Cleanup Section
 Add-SectionLabel "System Cleanup and App Management" (New-Object System.Drawing.Point(30, $currentY))
 $currentY += 30
@@ -1635,6 +1726,7 @@ function Show-CompleteSetupPlanner {
         @{ Id = 'WindowsCleaner'; Name = 'System Cleaner'; Default = $true; Description = 'Cleans temp files, caches, and routine system clutter. This is low risk and usually worth leaving on.'; Impact = 'Improves free space and removes temporary junk.' }
         @{ Id = 'UserCleaner'; Name = 'User Profile Temp Cleaner'; Default = $false; Description = 'Runs the legacy user-cleaner utility for deeper user-temp locations and local profile cleanup actions.'; Impact = 'Can free extra profile space, but is more aggressive than standard cleaner routines.' }
         @{ Id = 'DelProf'; Name = 'Delete Old User Profiles'; Default = $false; Description = 'Deletes old user profiles to reclaim disk space. Keep this off on shared PCs unless you are sure the profiles are no longer needed.'; Impact = 'Useful for lab or hand-me-down machines, but not recommended on shared personal PCs.' }
+        @{ Id = 'VisualOptimisation'; Name = 'Visual Optimisation'; Default = $false; Description = 'Runs the standalone visual optimisation script. This is now separate from System Optimization so visual changes are only applied when explicitly selected.'; Impact = 'Include only when you want animation/theme visual tuning applied as part of Complete PC Setup.' }
         @{ Id = 'SystemOptimisation'; Name = 'System Optimization'; Default = $true; Description = 'Applies the balanced optimization set for performance, privacy, and lower idle RAM usage without stripping core Windows functionality.'; Impact = 'This is the main tuning step for responsiveness and privacy.' }
         @{ Id = 'FixWindowsDefender'; Name = 'Fix Windows Defender'; Default = $false; Description = 'Runs Defender remediation and policy repair routines to restore core protection features when they are disabled or damaged.'; Impact = 'Helpful on systems where Defender is broken or blocked by old AV remnants.' }
         @{ Id = 'WindowsTroubleshooting'; Name = 'Windows Troubleshooting'; Default = $false; Description = 'Runs the troubleshooting module with guided fixes for common network, update, and Store problems.'; Impact = 'Useful for problem PCs, not required for a routine optimization pass.' }
@@ -2167,6 +2259,7 @@ function Start-AutomatedMaintenance {
 
         $resolvedScriptPaths = @{
             SystemOptimisation = $scriptPaths['SystemOptimisation']
+            VisualOptimisation = $scriptPaths['VisualOptimisation']
             UserCleaner = $scriptPaths['UserCleaner']
             DefenderFix = $scriptPaths['DefenderFix']
             Troubleshooting = $scriptPaths['Troubleshooting']
@@ -2209,6 +2302,10 @@ function Start-AutomatedMaintenance {
             & $runExternalScript -ScriptPath $resolvedScriptPaths.SystemOptimisation -ArgumentList $systemOptimizationArguments
         }.GetNewClosure()
 
+        $visualOptimizationTask = {
+            & $runExternalScript -ScriptPath $resolvedScriptPaths.VisualOptimisation -ArgumentList @('--automated')
+        }.GetNewClosure()
+
         $userCleanerTask = {
             & $runExternalScript -ScriptPath $resolvedScriptPaths.UserCleaner
         }.GetNewClosure()
@@ -2248,6 +2345,7 @@ function Start-AutomatedMaintenance {
             @{ Id = 'WindowsCleaner'; Name = 'System File Cleanup'; Script = $Scripts.WindowsCleaner; Weight = 10; Default = $true }
             @{ Id = 'UserCleaner'; Name = 'User Profile Temp Cleaner'; Script = $userCleanerTask; Weight = 8; Default = $false }
             @{ Id = 'DelProf'; Name = 'Delete User Profiles'; Script = $Scripts.DelProf; Weight = 8; Default = $false }
+            @{ Id = 'VisualOptimisation'; Name = 'Visual Optimisation'; Script = $visualOptimizationTask; Weight = 8; Default = $false }
             @{ Id = 'SystemOptimisation'; Name = 'System Optimization'; Script = $systemOptimizationTask; Weight = 18; Default = $true }
             @{ Id = 'FixWindowsDefender'; Name = 'Fix Windows Defender'; Script = $fixDefenderTask; Weight = 12; Default = $false }
             @{ Id = 'WindowsTroubleshooting'; Name = 'Windows Troubleshooting'; Script = $troubleshootingTask; Weight = 8; Default = $false }
@@ -2354,6 +2452,7 @@ $updateMainLayout = {
     $columnGap = 20
     $usableWidth = [Math]::Max(520, ($Form.ClientSize.Width - ($mainMargin * 2)))
     $dynamicButtonWidth = [Math]::Floor(($usableWidth - ($columnGap * 2)) / 3)
+    $dynamicButtonHeight = [Math]::Max(42, [int]([Math]::Ceiling($Form.Font.GetHeight() + 24)))
     if ($dynamicButtonWidth -lt 165) {
         $dynamicButtonWidth = 165
     }
@@ -2382,7 +2481,7 @@ $updateMainLayout = {
             continue
         }
 
-        $buttonControl.Size = New-Object System.Drawing.Size($dynamicButtonWidth, $buttonControl.Height)
+        $buttonControl.Size = New-Object System.Drawing.Size($dynamicButtonWidth, $dynamicButtonHeight)
 
         switch ($buttonMeta.Column) {
             0 { $buttonControl.Location = New-Object System.Drawing.Point($leftX, $buttonControl.Location.Y) }
@@ -2464,6 +2563,8 @@ try {
     } catch {
         if ($DebugMode) { Write-DebugMessage "Error during cleanup: $($_.Exception.Message)" "WARN" }
     }
+
+    $ExitButton.Location = New-Object System.Drawing.Point([Math]::Max(10, [int](($Form.ClientSize.Width - $ExitButton.Width) / 2)), $ExitButton.Location.Y)
 }
 
 Write-Host "Windows Maintenance Tool session ended." -ForegroundColor Cyan
