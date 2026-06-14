@@ -20,6 +20,13 @@ function Show-LoadingBar {
         $loadingForm.FormBorderStyle = "FixedDialog"
         $loadingForm.ControlBox = $false
         $loadingForm.TopMost = $true
+        # Apply consistent icon
+        $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+        $parentRoot = Split-Path -Parent $scriptRoot
+        $iconPath = Join-Path $parentRoot 'Assets\windowslogo.ico'
+        if (Test-Path $iconPath) {
+            try { $loadingForm.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon($iconPath) } catch {}
+        }
 
         $label = New-Object System.Windows.Forms.Label
         $label.Text = $Message

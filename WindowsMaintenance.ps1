@@ -96,6 +96,7 @@ $scriptPaths = @{
     InstallCleaner = Join-Path $ScriptRoot "Scripts\Windows{0}InstallCleaner.ps1"
     OneDrive = Join-Path $ScriptRoot "Scripts\Uninstallonedrive.ps1"
     Cleaner = Join-Path $ScriptRoot "Scripts\WindowsCleaner.ps1"
+    WindowsPrivacy = Join-Path $ScriptRoot "Scripts\WindowsPrivacy.ps1"
     Defrag = Join-Path $ScriptRoot "Scripts\windowsdefrag.ps1"
     DiskCheck = Join-Path $ScriptRoot "Scripts\windowsrepairvolume.ps1"
     Troubleshooting = Join-Path $ScriptRoot "Scripts\troubleshooting.ps1"
@@ -106,6 +107,7 @@ $scriptPaths = @{
     CustomChanges = Join-Path $ScriptRoot "Scripts\CustomChanges.ps1"
     AeroliteTheme = Join-Path $ScriptRoot "Scripts\aerolite.theme"
     Delprof2 = Join-Path $ScriptRoot "Scripts\Delprof2.exe"
+    DisableMSOnline = Join-Path $ScriptRoot "Scripts\DisableMSOnline.ps1"
 }
 
 Clear-Host
@@ -177,6 +179,7 @@ function Show-ProgressDialog {
             $Global:MainProgressForm.ControlBox = $false
             $Global:MainProgressForm.TopMost = $false
             $Global:MainProgressForm.BackColor = [System.Drawing.Color]::FromArgb(248, 250, 252)
+            Set-FormIcon -TargetForm $Global:MainProgressForm
             
             # Main progress bar
             $Global:MainProgressBar = New-Object System.Windows.Forms.ProgressBar
@@ -195,7 +198,7 @@ function Show-ProgressDialog {
             $timeLabel = New-Object System.Windows.Forms.Label
             $timeLabel.Size = New-Object System.Drawing.Size(450, 15)
             $timeLabel.Location = New-Object System.Drawing.Point(25, 98)
-            $timeLabel.Text = "Applying changes safely. This window updates as each step completes."
+            $timeLabel.Text = "Running. This window updates as each step completes."
             $timeLabel.TextAlign = 'MiddleCenter'
             $timeLabel.Font = New-Object System.Drawing.Font("Segoe UI", 8, [System.Drawing.FontStyle]::Italic)
             $timeLabel.ForeColor = [System.Drawing.Color]::FromArgb(95, 105, 120)
@@ -530,6 +533,7 @@ $Scripts = @{
             $selectionForm.TopMost = $true
             $selectionForm.MinimumSize = New-Object System.Drawing.Size(760, 680)
             $selectionForm.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::Dpi
+            Set-FormIcon -TargetForm $selectionForm
             
             # Header label
             $headerLabel = New-Object System.Windows.Forms.Label
@@ -557,7 +561,7 @@ $Scripts = @{
             $optimizedBtn = New-Object System.Windows.Forms.Button
             $optimizedBtn.Location = New-Object System.Drawing.Point(230, 55)
             $optimizedBtn.Size = New-Object System.Drawing.Size(120, 30)
-            $optimizedBtn.Text = "Recommended Debloat"
+            $optimizedBtn.Text = "Load Balanced Defaults"
             $selectionForm.Controls.Add($optimizedBtn)
             
             # Search box
@@ -922,6 +926,7 @@ $Scripts = @{
             $selectionForm.MinimizeBox = $false
             $selectionForm.Font = New-Object System.Drawing.Font("Segoe UI", 9)
             $selectionForm.TopMost = $true
+            Set-FormIcon -TargetForm $selectionForm
             
             # Header label
             $headerLabel = New-Object System.Windows.Forms.Label
@@ -1257,6 +1262,36 @@ $Scripts = @{
             )
         }
     })
+
+    WindowsPrivacy = [scriptblock]::Create({
+        $scriptPath = $scriptPaths.WindowsPrivacy
+        if (Test-Path $scriptPath) {
+            & $scriptPath
+        } else {
+            Write-Host "Windows Privacy script not found: $scriptPath" -ForegroundColor Red
+            [System.Windows.Forms.MessageBox]::Show(
+                "Windows Privacy script not found: $scriptPath",
+                'Windows Maintenance - Error',
+                'OK',
+                'Error'
+            )
+        }
+    })
+
+    DisableMSOnline = [scriptblock]::Create({
+        $scriptPath = $scriptPaths.DisableMSOnline
+        if (Test-Path $scriptPath) {
+            & $scriptPath
+        } else {
+            Write-Host "DisableMSOnline script not found: $scriptPath" -ForegroundColor Red
+            [System.Windows.Forms.MessageBox]::Show(
+                "DisableMSOnline script not found: $scriptPath",
+                'Windows Maintenance - Error',
+                'OK',
+                'Error'
+            )
+        }
+    })
 }
 
 # Validate script block assignment and provide feedback
@@ -1277,6 +1312,7 @@ if ($validationErrors -gt 0) {
 } else {
     Write-Host "All maintenance modules loaded successfully!" -ForegroundColor Green
 }
+$validationErrors = $null  # prevent any bare variable output to console
 
 # Enhanced main form with modern UI and better organization
 $UiPalette = @{
@@ -1353,6 +1389,20 @@ try {
     }
 } catch {
     if ($DebugMode) { Write-DebugMessage "Could not load icon file: $($_.Exception.Message)" "WARN" }
+}
+
+# Helper to consistently apply the windowslogo.ico to any sub-form / dialog (progress, selections, planner, etc.)
+function Set-FormIcon {
+    param([System.Windows.Forms.Form]$TargetForm)
+    if ($null -eq $TargetForm) { return }
+    try {
+        $iconPath = Join-Path $ScriptRoot "Assets\windowslogo.ico"
+        if (Test-Path $iconPath) {
+            $TargetForm.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon($iconPath)
+        }
+    } catch {
+        if ($DebugMode) { Write-DebugMessage "Could not set icon on form: $($_.Exception.Message)" "WARN" }
+    }
 }
 
 # Header section with title and OS info
@@ -1585,7 +1635,7 @@ function Add-SectionLabel {
 
 # Instructions label
 $instructionsLabel = New-Object System.Windows.Forms.Label
-$instructionsLabel.Text = "Run individual tools for targeted fixes, or use Complete PC Setup to follow a guided checklist with clear impact notes before anything is applied."
+$instructionsLabel.Text = "The task selector (presets, Apply/Revert mode, all tools including Disable MS Account Prompts) is the main content. This is the single window experience."
 $instructionsLabel.Size = New-Object System.Drawing.Size(($formWidth - 40), 32)
 $instructionsLabel.Location = New-Object System.Drawing.Point(20, 80)
 $instructionsLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Italic)
@@ -1603,7 +1653,7 @@ $summaryPanel.BorderStyle = 'FixedSingle'
 $summaryPanel.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 
 $summaryLabel = New-Object System.Windows.Forms.Label
-$summaryLabel.Text = "Recommended defaults are conservative: improve responsiveness, reduce background activity and telemetry, and remove consumer bloat while keeping core Windows shell features intact."
+$summaryLabel.Text = "Preset-driven task selector is the primary interface (single window titled 'Windows Maintenance'). Choose Minimal / Optimal / Aggressive / Fix then adjust and run."
 $summaryLabel.Size = New-Object System.Drawing.Size(($formWidth - 60), 30)
 $summaryLabel.Location = New-Object System.Drawing.Point(10, 9)
 $summaryLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9)
@@ -1615,67 +1665,15 @@ $summaryLabel.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Win
 $summaryPanel.Controls.Add($summaryLabel)
 $Form.Controls.Add($summaryPanel)
 
-# Add sections with enhanced spacing and organization
-$currentY = 175
-
-# Calculate button positions for 3-column layout with symmetrical padding
-$leftButtonX = 30
-$middleButtonX = $leftButtonX + $buttonWidth + 20
-$rightButtonX = $middleButtonX + $buttonWidth + 20
-
-# Quick Actions Section
-Add-SectionLabel "Quick Optimisations" (New-Object System.Drawing.Point(30, $currentY))
-$currentY += 30
-
-Add-MaintenanceButton "Visual Optimisation" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $Scripts.VisualOptimisation "Performance" "Apply all visual performance changes in one pass: disable animations, DWM effects, and theme overhead for responsiveness." -Column 0
-$currentY += 50
-
-# System Cleanup Section
-Add-SectionLabel "System Cleanup and App Management" (New-Object System.Drawing.Point(30, $currentY))
-$currentY += 30
-
-Add-MaintenanceButton "Fresh Install Cleanup" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $Scripts.WindowsInstallCleanup "Cleanup" "Open a selectable debloat list of preinstalled Microsoft apps while excluding core shell components for safety." -Column 0
-Add-MaintenanceButton "Reinstall Default Apps" (New-Object System.Drawing.Point($middleButtonX, $currentY)) $Scripts.ReinstallApps "Cleanup" "Restore previously removed inbox apps from local manifests or Microsoft Store mappings." -Column 1
-Add-MaintenanceButton "Uninstall OneDrive" (New-Object System.Drawing.Point($rightButtonX, $currentY)) $Scripts.WindowsUninstallOneDrive "Cleanup" "Remove OneDrive client integration and related background processes when cloud sync is not required." -Column 2
-$currentY += 50
-
-Add-MaintenanceButton "Delete User Profiles" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $Scripts.DelProf "Cleanup" "Delete stale local profiles to recover storage; use only when you are certain those profiles are no longer needed." -Column 0
-$currentY += 70
-
-# System Repair Section
-Add-SectionLabel "System Health and Repair" (New-Object System.Drawing.Point(30, $currentY))
-$currentY += 30
-
-Add-MaintenanceButton "DISM Health Check" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $Scripts.DISMRestore "Repair" "Validate and repair component store health when Windows servicing or updates are unreliable." -Column 0
-Add-MaintenanceButton "System File Check" (New-Object System.Drawing.Point($middleButtonX, $currentY)) $Scripts.SFCRepair "Repair" "Scan protected system files and restore known-good versions when corruption is detected." -Column 1
-$currentY += 70
-
-# Disk Maintenance Section  
-Add-SectionLabel "Disk Maintenance and Optimisation" (New-Object System.Drawing.Point(30, $currentY))
-$currentY += 30
-
-Add-MaintenanceButton "System Cleaner" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $Scripts.WindowsCleaner "Repair" "Remove temporary files, update residue, and routine cache clutter to recover space and reduce churn." -Column 0
-Add-MaintenanceButton "Disk Check and Repair" (New-Object System.Drawing.Point($middleButtonX, $currentY)) $Scripts.DiskCheck "Repair" "Run file-system integrity checks and schedule corrective actions where disk issues are detected." -Column 1
-Add-MaintenanceButton "Disk Defragmentation" (New-Object System.Drawing.Point($rightButtonX, $currentY)) $Scripts.Defrag "Repair" "Optimise storage layout for HDD systems; SSD-aware checks are included before actions are applied." -Column 2
-$currentY += 70
-
-# Advanced Options Section
-Add-SectionLabel "Advanced System Tools" (New-Object System.Drawing.Point(30, $currentY))
-$currentY += 30
-
-Add-MaintenanceButton "System Troubleshooting" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $Scripts.WindowsTroubleshooting "Advanced" "Run guided remediation for common networking, update, Store, and policy-related faults." -Column 0
-Add-MaintenanceButton "Performance Optimisation" (New-Object System.Drawing.Point($middleButtonX, $currentY)) $Scripts.SystemOptimisation "Advanced" "Open the dedicated optimisation panel with grouped privacy, performance, services, and recovery controls." -Column 1
-$currentY += 70
-
-# Special Operations Section
-Add-SectionLabel "Automated Operations" (New-Object System.Drawing.Point(30, $currentY))
-$currentY += 30
+# Old individual button grid removed.
+# The task selector is the main content (launched as the primary UI for one-window experience).
+# "Complete PC Setup Planner" title removed from the selector window to match "without its name".
 
 function Show-CompleteSetupPlanner {
     $plannerHeight = [Math]::Min(720, [Math]::Max(620, ($screenHeight - 90)))
 
     $plannerForm = New-Object System.Windows.Forms.Form -Property @{
-        Text = 'Complete PC Setup Planner'
+        Text = 'Windows Maintenance'  # without "Complete PC Setup Planner" name as requested
         Size = New-Object System.Drawing.Size(880, $plannerHeight)
         StartPosition = 'CenterParent'
         FormBorderStyle = 'Sizable'
@@ -1687,6 +1685,7 @@ function Show-CompleteSetupPlanner {
         AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::Dpi
         TopMost = $true
     }
+    Set-FormIcon -TargetForm $plannerForm
     Enable-DoubleBuffering -Control $plannerForm
     $plannerForm.AutoScroll = $true
     $plannerForm.AutoScrollMinSize = New-Object System.Drawing.Size(860, 700)
@@ -1699,7 +1698,7 @@ function Show-CompleteSetupPlanner {
     $plannerHeader.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
 
     $plannerTitle = New-Object System.Windows.Forms.Label
-    $plannerTitle.Text = 'Complete PC Setup Planner'
+    $plannerTitle.Text = 'Windows Maintenance'  # without the old name, as the main content of the single window
     $plannerTitle.Location = New-Object System.Drawing.Point(16, 12)
     $plannerTitle.Size = New-Object System.Drawing.Size(320, 24)
     $plannerTitle.Font = New-Object System.Drawing.Font("Segoe UI", 14, [System.Drawing.FontStyle]::Bold)
@@ -1719,6 +1718,41 @@ function Show-CompleteSetupPlanner {
     $plannerHeader.Controls.AddRange(@($plannerTitle, $plannerSubtitle))
     $plannerForm.Controls.Add($plannerHeader)
 
+    # Mode selector placed above the presets (small strip for Apply/Revert toggle with auto-selections on switch)
+    $script:modePanel = New-Object System.Windows.Forms.Panel
+    $script:modePanel.Size = New-Object System.Drawing.Size(860, 34)
+    $script:modePanel.Location = New-Object System.Drawing.Point(10, 90)
+    $script:modePanel.BackColor = $UiPalette.CardBack
+    $script:modePanel.BorderStyle = 'FixedSingle'
+    $script:modePanel.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
+
+    $modeLabel = New-Object System.Windows.Forms.Label
+    $modeLabel.Text = 'Mode:'
+    $modeLabel.Location = New-Object System.Drawing.Point(14, 8)
+    $modeLabel.Size = New-Object System.Drawing.Size(45, 18)
+    $modeLabel.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+    $modeLabel.ForeColor = $UiPalette.TextPrimary
+
+    $script:applyModeBtn = New-Object System.Windows.Forms.Button
+    $script:applyModeBtn.Text = 'Apply'
+    $script:applyModeBtn.Location = New-Object System.Drawing.Point(62, 5)
+    $script:applyModeBtn.Size = New-Object System.Drawing.Size(65, 24)
+    $script:applyModeBtn.FlatStyle = 'Flat'
+    $script:applyModeBtn.FlatAppearance.BorderSize = 1
+    $script:applyModeBtn.Add_Click({ Set-OperationMode 'Apply' })
+
+    $script:revertModeBtn = New-Object System.Windows.Forms.Button
+    $script:revertModeBtn.Text = 'Revert'
+    $script:revertModeBtn.Location = New-Object System.Drawing.Point(132, 5)
+    $script:revertModeBtn.Size = New-Object System.Drawing.Size(65, 24)
+    $script:revertModeBtn.FlatStyle = 'Flat'
+    $script:revertModeBtn.FlatAppearance.BorderSize = 1
+    $script:revertModeBtn.Add_Click({ Set-OperationMode 'Revert' })
+
+    $script:modePanel.Controls.AddRange(@($modeLabel, $script:applyModeBtn, $script:revertModeBtn))
+    $plannerForm.Controls.Add($script:modePanel)
+
+    # presetPanel moved below the mode strip
     $taskDefinitions = @(
         @{ Id = 'WindowsInstallCleanup'; Name = 'Windows Install Cleanup'; Default = $true; Description = 'Runs the balanced junk-app cleanup and disables safe non-essential services. This is the main debloat step and keeps the Windows shell, Store, and core UX intact.'; Impact = 'Best for reducing preinstalled Microsoft consumer apps and background noise.' }
         @{ Id = 'ReinstallApps'; Name = 'Reinstall Default Apps'; Default = $false; Description = 'Opens the app restore selector to reinstall Microsoft provisioned apps that may have been removed earlier.'; Impact = 'Useful when the setup should end with missing inbox apps restored instead of removed.' }
@@ -1728,11 +1762,13 @@ function Show-CompleteSetupPlanner {
         @{ Id = 'DelProf'; Name = 'Delete Old User Profiles'; Default = $false; Description = 'Deletes old user profiles to reclaim disk space. Keep this off on shared PCs unless you are sure the profiles are no longer needed.'; Impact = 'Useful for lab or hand-me-down machines, but not recommended on shared personal PCs.' }
         @{ Id = 'VisualOptimisation'; Name = 'Visual Optimisation'; Default = $false; Description = 'Runs the standalone visual optimisation script. This is now separate from System Optimisation so visual changes are only applied when explicitly selected.'; Impact = 'Include only when you want animation/theme visual tuning applied as part of Complete PC Setup.' }
         @{ Id = 'SystemOptimisation'; Name = 'System Optimisation'; Default = $true; Description = 'Applies the balanced optimisation set for performance, privacy, and lower idle RAM usage without stripping core Windows functionality.'; Impact = 'This is the main tuning step for responsiveness and privacy.' }
+        @{ Id = 'WindowsPrivacy'; Name = 'Windows Privacy'; Default = $true; Description = 'Runs the dedicated privacy script that applies telemetry reduction (registry + services + tasks), ad / recommendation suppression, and hard network blocks (hosts file + outbound firewall rules) so that no feedback or diagnostic data is sent to Microsoft even at the "basic" level.'; Impact = 'Primary privacy baseline for all presets. Also reduces unwanted Microsoft network traffic.' }
+        @{ Id = 'DisableMSOnline'; Name = 'Disable MS Account Prompts'; Default = $true; Description = 'Applies registry policies to hide Microsoft account sign-in nags, "Back up your PC to Microsoft account", and "It''s all here with a Microsoft account" banners/prompts in Settings and Start for local account users.'; Impact = 'Recommended for anyone who prefers to remain on a local profile and wants fewer forced cloud account upsells.' }
         @{ Id = 'FixWindowsDefender'; Name = 'Fix Windows Defender'; Default = $false; Description = 'Runs Defender remediation and policy repair routines to restore core protection features when they are disabled or damaged.'; Impact = 'Helpful on systems where Defender is broken or blocked by old AV remnants.' }
         @{ Id = 'WindowsTroubleshooting'; Name = 'Windows Troubleshooting'; Default = $false; Description = 'Runs the troubleshooting module with guided fixes for common network, update, and Store problems.'; Impact = 'Useful for problem PCs, not required for a routine optimisation pass.' }
         @{ Id = 'CustomChanges'; Name = 'Custom Changes Panel'; Default = $false; Description = 'Opens the custom changes panel for optional manual tweak flows beyond the standard preset path.'; Impact = 'For power users who want extra manual controls after the baseline setup.' }
         @{ Id = 'ApplyAeroliteTheme'; Name = 'Apply Aerolite Theme'; Default = $false; Description = 'Launches the bundled Aerolite theme file so you can switch visual style as part of final setup.'; Impact = 'Cosmetic change only; does not alter performance/security settings.' }
-        @{ Id = 'DISMRestore'; Name = 'DISM Health Check'; Default = $false; Description = 'Checks the Windows component store and repairs corruption when found. Helpful on damaged systems, but slower than the default recommended set.'; Impact = 'Good for machines with update or image-health issues.' }
+        @{ Id = 'DISMRestore'; Name = 'DISM Health Check'; Default = $false; Description = 'Checks the Windows component store and repairs corruption when found. Helpful on damaged systems, but slower than a typical preset run.'; Impact = 'Good for machines with update or image-health issues.' }
         @{ Id = 'SFCRepair'; Name = 'System File Check'; Default = $false; Description = 'Scans protected system files and repairs corruption. Useful when Windows components behave oddly, but not necessary for every setup run.'; Impact = 'Adds repair coverage at the cost of runtime.' }
         @{ Id = 'DiskCheck'; Name = 'Disk Check and Repair'; Default = $false; Description = 'Checks the file system for disk issues. This can take time and may schedule work for reboot on busy volumes.'; Impact = 'Only include when storage issues are suspected.' }
         @{ Id = 'Defrag'; Name = 'Disk Defragmentation'; Default = $false; Description = 'Runs the disk optimisation script. Best for HDD systems; SSD-aware logic remains in the script, but this is still optional.'; Impact = 'Useful for older spinning disks, usually unnecessary for SSD-focused setups.' }
@@ -1748,18 +1784,18 @@ function Show-CompleteSetupPlanner {
             Name = 'Minimal'
             Description = 'Fastest and safest preset. Keeps the setup light and focuses on cleanup plus balanced optimisation.'
             Disclaimer = 'Minimal selects only the core cleanup and optimisation steps. It avoids extra repair scans, disk checks, and more opinionated removals so the machine stays familiar and usable.'
-            Tasks = @('WindowsCleaner', 'SystemOptimisation')
+            Tasks = @('WindowsCleaner', 'SystemOptimisation', 'WindowsPrivacy', 'DisableMSOnline')
             DisableAI = $false
             OptimisationProfile = 'minimal'
-            AccentColor = [System.Drawing.Color]::FromArgb(231, 242, 255)
-            BorderColor = [System.Drawing.Color]::FromArgb(170, 198, 228)
-            TextColor = $UiPalette.TextPrimary
+            AccentColor = [System.Drawing.Color]::FromArgb(220, 245, 220)
+            BorderColor = [System.Drawing.Color]::FromArgb(100, 170, 100)
+            TextColor = [System.Drawing.Color]::FromArgb(30, 90, 40)
         },
         @{
             Name = 'Optimal'
-            Description = 'Recommended balanced preset for most PCs.'
-            Disclaimer = 'Optimal is the recommended preset. It includes debloat, cleaner, OneDrive removal, and balanced optimisation focused on performance, lower idle RAM, and privacy without stripping core Windows UX.'
-            Tasks = @('WindowsInstallCleanup', 'WindowsUninstallOneDrive', 'WindowsCleaner', 'SystemOptimisation')
+            Description = 'Balanced preset for most PCs (cleanup + optimisation + privacy).'
+            Disclaimer = 'Optimal includes debloat, cleaner, OneDrive removal, and balanced optimisation focused on performance, lower idle RAM, and privacy without stripping core Windows UX. Use presets to quickly load a sensible starting checklist.'
+            Tasks = @('WindowsInstallCleanup', 'WindowsUninstallOneDrive', 'WindowsCleaner', 'SystemOptimisation', 'WindowsPrivacy', 'DisableMSOnline')
             DisableAI = $false
             OptimisationProfile = 'optimal'
             AccentColor = $UiPalette.AccentSoft
@@ -1770,12 +1806,23 @@ function Show-CompleteSetupPlanner {
             Name = 'Aggressive'
             Description = 'Broader repair and tuning preset for problem machines.'
             Disclaimer = 'Aggressive enables extra repair and maintenance steps, adds the Windows AI disable option, and may take much longer to finish. It is still kept short of destructive malware-style debloat, but it is the heaviest preset in this tool.'
-            Tasks = @('WindowsInstallCleanup', 'WindowsUninstallOneDrive', 'WindowsCleaner', 'SystemOptimisation', 'DISMRestore', 'SFCRepair', 'DiskCheck', 'Defrag')
+            Tasks = @('WindowsInstallCleanup', 'WindowsUninstallOneDrive', 'WindowsCleaner', 'SystemOptimisation', 'WindowsPrivacy', 'DisableMSOnline', 'DISMRestore', 'SFCRepair', 'DiskCheck', 'Defrag')
             DisableAI = $true
             OptimisationProfile = 'aggressive'
             AccentColor = [System.Drawing.Color]::FromArgb(255, 230, 230)
             BorderColor = [System.Drawing.Color]::FromArgb(210, 70, 70)
             TextColor = [System.Drawing.Color]::FromArgb(130, 18, 18)
+        },
+        @{
+            Name = 'Fix'
+            Description = 'Runs all fixing and repair scripts to restore system health.'
+            Disclaimer = 'Fix selects every repair and fix task: DISM, SFC, disk checks/repair, Defender fix, troubleshooting, optimisation, privacy hardening, prompt fixes, and visual fixes. Ideal when your system needs comprehensive repairs.'
+            Tasks = @('DISMRestore', 'SFCRepair', 'DiskCheck', 'FixWindowsDefender', 'WindowsTroubleshooting', 'SystemOptimisation', 'WindowsPrivacy', 'DisableMSOnline', 'VisualOptimisation')
+            DisableAI = $false
+            OptimisationProfile = 'optimal'
+            AccentColor = [System.Drawing.Color]::FromArgb(255, 243, 224)
+            BorderColor = [System.Drawing.Color]::FromArgb(230, 126, 34)
+            TextColor = [System.Drawing.Color]::FromArgb(120, 60, 0)
         }
     )
 
@@ -1784,9 +1831,59 @@ function Show-CompleteSetupPlanner {
         $presetLookup[$presetDefinition.Name] = $presetDefinition
     }
 
+    $script:operationMode = 'Apply'
+
+    function Set-OperationMode {
+        param([Parameter(Mandatory)][string]$Mode)
+        $script:operationMode = $Mode
+
+        $isRevert = ($Mode -eq 'Revert')
+
+        if ($isRevert) {
+            $script:applyModeBtn.BackColor = $UiPalette.CardBack
+            $script:applyModeBtn.FlatAppearance.BorderColor = $UiPalette.Border
+            $script:applyModeBtn.ForeColor = $UiPalette.TextPrimary
+            $script:applyModeBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
+
+            $script:revertModeBtn.BackColor = [System.Drawing.Color]::FromArgb(255, 243, 224)
+            $script:revertModeBtn.FlatAppearance.BorderColor = [System.Drawing.Color]::FromArgb(230, 126, 34)
+            $script:revertModeBtn.ForeColor = [System.Drawing.Color]::FromArgb(120, 60, 0)
+            $script:revertModeBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+
+            $startButton.Text = 'Revert Selected Tasks'
+            $startButton.BackColor = [System.Drawing.Color]::FromArgb(230, 126, 34)
+            $startButton.ForeColor = [System.Drawing.Color]::White
+
+            # Auto-select tasks that have dedicated revert scripts for convenience
+            $revertableIds = @('WindowsPrivacy','SystemOptimisation','DisableMSOnline','VisualOptimisation','WindowsUninstallOneDrive')
+            for ($i = 0; $i -lt $checkedTasks.Items.Count; $i++) {
+                $tName = [string]$checkedTasks.Items[$i]
+                $tid = $taskLookup[$tName].Id
+                $checkedTasks.SetItemChecked($i, ($revertableIds -contains $tid))
+            }
+            $aiCheckbox.Checked = $false
+        } else {
+            $script:revertModeBtn.BackColor = $UiPalette.CardBack
+            $script:revertModeBtn.FlatAppearance.BorderColor = $UiPalette.Border
+            $script:revertModeBtn.ForeColor = $UiPalette.TextPrimary
+            $script:revertModeBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
+
+            $script:applyModeBtn.BackColor = $UiPalette.AccentSoft
+            $script:applyModeBtn.FlatAppearance.BorderColor = $UiPalette.Border
+            $script:applyModeBtn.ForeColor = $UiPalette.TextPrimary
+            $script:applyModeBtn.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
+
+            $startButton.Text = 'Apply Selected Tasks'
+            $startButton.BackColor = $UiPalette.Accent
+            $startButton.ForeColor = [System.Drawing.Color]::White
+
+            Set-SetupPreset -PresetName 'Optimal'
+        }
+    }
+
     $presetPanel = New-Object System.Windows.Forms.Panel
     $presetPanel.Size = New-Object System.Drawing.Size(860, 118)
-    $presetPanel.Location = New-Object System.Drawing.Point(10, 95)
+    $presetPanel.Location = New-Object System.Drawing.Point(10, 132)
     $presetPanel.BackColor = $UiPalette.CardBack
     $presetPanel.BorderStyle = 'FixedSingle'
     $presetPanel.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
@@ -1799,7 +1896,7 @@ function Show-CompleteSetupPlanner {
     $presetPanelTitle.ForeColor = $UiPalette.TextPrimary
 
     $presetPanelHint = New-Object System.Windows.Forms.Label
-    $presetPanelHint.Text = 'Preset buttons update the recommended checklist and optimisation depth. You can still manually tick or untick any item before starting.'
+    $presetPanelHint.Text = 'Preset buttons load a ready-made task checklist and optimisation depth. You can still manually tick or untick any item before starting.'
     $presetPanelHint.Location = New-Object System.Drawing.Point(14, 34)
     $presetPanelHint.Size = New-Object System.Drawing.Size(830, 18)
     $presetPanelHint.ForeColor = $UiPalette.TextMuted
@@ -1828,7 +1925,7 @@ function Show-CompleteSetupPlanner {
 
     $taskPanel = New-Object System.Windows.Forms.Panel
     $taskPanel.Size = New-Object System.Drawing.Size(390, 455)
-    $taskPanel.Location = New-Object System.Drawing.Point(10, 225)
+    $taskPanel.Location = New-Object System.Drawing.Point(10, 260)
     $taskPanel.BackColor = $UiPalette.CardBack
     $taskPanel.BorderStyle = 'FixedSingle'
     $taskPanel.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
@@ -1841,7 +1938,7 @@ function Show-CompleteSetupPlanner {
     $taskPanelTitle.ForeColor = $UiPalette.TextPrimary
 
     $taskPanelHint = New-Object System.Windows.Forms.Label
-    $taskPanelHint.Text = 'Recommended items are pre-selected. Select any task to view a fuller explanation and expected outcome.'
+    $taskPanelHint.Text = 'Preset defaults are pre-checked. Select any task to view a fuller explanation and expected outcome.'
     $taskPanelHint.Location = New-Object System.Drawing.Point(12, 34)
     $taskPanelHint.Size = New-Object System.Drawing.Size(360, 32)
     $taskPanelHint.ForeColor = $UiPalette.TextMuted
@@ -1936,15 +2033,6 @@ function Show-CompleteSetupPlanner {
     ))
     $plannerForm.Controls.Add($detailPanel)
 
-    $recommendedButton = New-Object System.Windows.Forms.Button
-    $recommendedButton.Text = 'Recommended'
-    $recommendedButton.Location = New-Object System.Drawing.Point(10, 645)
-    $recommendedButton.Size = New-Object System.Drawing.Size(110, 32)
-    $recommendedButton.FlatStyle = 'Flat'
-    $recommendedButton.BackColor = $UiPalette.AccentSoft
-    $recommendedButton.FlatAppearance.BorderColor = $UiPalette.Border
-    $recommendedButton.Anchor = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left
-
     $selectAllButton = New-Object System.Windows.Forms.Button
     $selectAllButton.Text = 'Select All'
     $selectAllButton.Location = New-Object System.Drawing.Point(130, 645)
@@ -1983,12 +2071,12 @@ function Show-CompleteSetupPlanner {
     $cancelButton.FlatAppearance.BorderColor = $UiPalette.Border
     $cancelButton.Anchor = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Right
 
-    $plannerForm.CancelButton = $cancelButton
+    $Form.Controls.AddRange(@($selectAllButton, $clearAllButton, $startButton, $cancelButton))
 
     $presetButtons = @{}
     $selectedOptimisationProfile = 'optimal'
 
-    function Apply-SetupPreset {
+    function Set-SetupPreset {
         param([Parameter(Mandatory)][string]$PresetName)
 
         if (-not $presetLookup.ContainsKey($PresetName)) {
@@ -1996,7 +2084,12 @@ function Show-CompleteSetupPlanner {
         }
 
         $preset = $presetLookup[$PresetName]
-        $selectedOptimisationProfile = if ($preset.ContainsKey('OptimisationProfile')) { [string]$preset.OptimisationProfile } else { 'optimal' }
+        
+        if ($preset.ContainsKey('OptimisationProfile')) {
+            $script:selectedOptimisationProfile = [string]$preset.OptimisationProfile
+        } else {
+            $script:selectedOptimisationProfile = 'optimal'
+        }
 
         for ($i = 0; $i -lt $checkedTasks.Items.Count; $i++) {
             $taskName = [string]$checkedTasks.Items[$i]
@@ -2040,7 +2133,7 @@ function Show-CompleteSetupPlanner {
         $presetButton.Tag = $presetDefinition.Name
         $presetButton.Anchor = [System.Windows.Forms.AnchorStyles]::Top -bor [System.Windows.Forms.AnchorStyles]::Right
         $presetButton.Add_Click({
-            Apply-SetupPreset -PresetName ([string]$this.Tag)
+            Set-SetupPreset -PresetName ([string]$this.Tag)
         })
 
         $presetButtons[$presetDefinition.Name] = $presetButton
@@ -2053,9 +2146,9 @@ function Show-CompleteSetupPlanner {
 
         if ([string]::IsNullOrWhiteSpace($TaskName) -or -not $taskLookup.ContainsKey($TaskName)) {
             $detailTitle.Text = 'Task Explanation'
-            $detailDescription.Text = 'Select a task on the left to view exactly what it changes, where it is applied, and whether it is part of the recommended baseline.'
-            $detailImpact.Text = 'The default checklist is designed for balanced results: better responsiveness, lower idle overhead, and stronger privacy without removing core Windows user experience features.'
-            $detailRecommendation.Text = 'For most users, keep the default selection and only add repair-heavy tasks when a specific fault or maintenance need is known.'
+            $detailDescription.Text = 'Select a task on the left to view exactly what it changes, where it is applied, and the expected outcome.'
+            $detailImpact.Text = 'The checklist is driven by the chosen preset for balanced or aggressive results: better responsiveness, lower idle overhead, and stronger privacy without removing core Windows user experience features.'
+            $detailRecommendation.Text = 'Use a preset button for a good starting point, then customise. Add repair tasks only when a specific issue is present.'
             return
         }
 
@@ -2074,10 +2167,6 @@ function Show-CompleteSetupPlanner {
         if ($checkedTasks.SelectedIndex -ge 0) {
             Update-PlannerDetails -TaskName ([string]$checkedTasks.Items[$checkedTasks.SelectedIndex])
         }
-    })
-
-    $recommendedButton.Add_Click({
-        Apply-SetupPreset -PresetName 'Optimal'
     })
 
     $selectAllButton.Add_Click({
@@ -2099,10 +2188,10 @@ function Show-CompleteSetupPlanner {
             $selectedTaskIds += $taskLookup[[string]$checkedItem].Id
         }
 
-        if ($aiCheckbox.Checked -and -not ($selectedTaskIds -contains 'SystemOptimisation')) {
+        if ($aiCheckbox.Checked -and -not ($selectedTaskIds -contains 'WindowsPrivacy')) {
             [System.Windows.Forms.MessageBox]::Show(
-                'Windows AI disablement is applied inside System Optimisation. Please include System Optimisation in the checklist to use this option.',
-                'Complete PC Setup Planner',
+            'Windows AI disablement is applied inside Windows Privacy. Please include Windows Privacy in the checklist to use this option.',
+                'Windows Maintenance',
                 'OK',
                 'Information'
             ) | Out-Null
@@ -2111,8 +2200,8 @@ function Show-CompleteSetupPlanner {
 
         if ($selectedTaskIds.Count -eq 0 -and -not $aiCheckbox.Checked) {
             [System.Windows.Forms.MessageBox]::Show(
-                'Select at least one task before starting Complete PC Setup so the tool has an execution plan.',
-                'Complete PC Setup Planner',
+                'Select at least one task before starting so the tool has an execution plan.',
+                'Windows Maintenance',
                 'OK',
                 'Information'
             ) | Out-Null
@@ -2124,12 +2213,13 @@ function Show-CompleteSetupPlanner {
             SelectedTaskIds = $selectedTaskIds
             DisableAI = $aiCheckbox.Checked
             OptimisationProfile = $selectedOptimisationProfile
+            Revert = ($script:operationMode -eq 'Revert')
         }
         $plannerForm.DialogResult = [System.Windows.Forms.DialogResult]::OK
         $plannerForm.Close()
     })
 
-    $plannerForm.Controls.AddRange(@($recommendedButton, $selectAllButton, $clearAllButton, $startButton, $cancelButton))
+    $plannerForm.Controls.AddRange(@($selectAllButton, $clearAllButton, $startButton, $cancelButton))
 
     $updatePlannerLayout = {
         $margin = 10
@@ -2139,8 +2229,15 @@ function Show-CompleteSetupPlanner {
         $plannerHeader.Size = New-Object System.Drawing.Size(($clientWidth - ($margin * 2)), 72)
         $plannerSubtitle.Size = New-Object System.Drawing.Size(($plannerHeader.Width - 30), 18)
 
-        $presetPanel.Location = New-Object System.Drawing.Point($margin, ($plannerHeader.Bottom + 12))
+        if ($script:modePanel) {
+            $script:modePanel.Location = New-Object System.Drawing.Point($margin, ($plannerHeader.Bottom + 8))
+            $script:modePanel.Size = New-Object System.Drawing.Size(($clientWidth - ($margin * 2)), 34)
+        }
+
+        $presetPanel.Location = New-Object System.Drawing.Point($margin, ($script:modePanel.Bottom + 8))
         $presetPanel.Size = New-Object System.Drawing.Size(($clientWidth - ($margin * 2)), 118)
+
+        # contentTop and task/detail positioning remain based on preset bottom (now after the mode strip)
         $presetButtonWidth = 110
         $presetButtonSpacing = 10
         $presetButtonLaneWidth = (($presetButtonWidth + $presetButtonSpacing) * $presetDefinitions.Count) - $presetButtonSpacing
@@ -2156,6 +2253,7 @@ function Show-CompleteSetupPlanner {
 
         $presetPanelHint.Size = New-Object System.Drawing.Size($presetHintWidth, 18)
         $presetWarningPanel.Size = New-Object System.Drawing.Size(($presetPanel.Width - 28), 46)
+        # Mode buttons are statically placed inside the (now taller) presetPanel below the warning; no extra dynamic positioning needed.
         $presetWarningLabel.Size = New-Object System.Drawing.Size(($presetWarningPanel.Width - 20), 30)
 
         $presetIndex = 0
@@ -2197,8 +2295,8 @@ function Show-CompleteSetupPlanner {
         $detailRecommendation.Location = New-Object System.Drawing.Point(16, ($detailRecommendationTitle.Bottom + 6))
         $detailRecommendation.Size = New-Object System.Drawing.Size(($detailPanel.Width - 35), [Math]::Max(42, ($detailPanel.Height - $detailRecommendation.Location.Y - 12)))
 
-        $recommendedButton.Location = New-Object System.Drawing.Point($margin, $bottomButtonsY)
-        $selectAllButton.Location = New-Object System.Drawing.Point(($recommendedButton.Right + 8), $bottomButtonsY)
+        # No dedicated "Recommended" button - presets (Minimal / Optimal / Aggressive / Fix) handle baseline selection.
+        $selectAllButton.Location = New-Object System.Drawing.Point($margin, $bottomButtonsY)
         $clearAllButton.Location = New-Object System.Drawing.Point(($selectAllButton.Right + 8), $bottomButtonsY)
         $cancelButton.Location = New-Object System.Drawing.Point(($clientWidth - $margin - $cancelButton.Width), $bottomButtonsY)
         $startButton.Location = New-Object System.Drawing.Point(($cancelButton.Left - 8 - $startButton.Width), $bottomButtonsY)
@@ -2209,7 +2307,8 @@ function Show-CompleteSetupPlanner {
     $plannerForm.Add_Shown({ & $updatePlannerLayout })
     $plannerForm.Add_Resize({ & $updatePlannerLayout })
 
-    Apply-SetupPreset -PresetName 'Optimal'
+    Set-SetupPreset -PresetName 'Optimal'
+    Set-OperationMode 'Apply'
     Update-PlannerDetails
     $null = $plannerForm.ShowDialog($Form)
 
@@ -2226,7 +2325,8 @@ function Start-AutomatedMaintenance {
         [switch]$ScheduleMode,
         [string[]]$SelectedTaskIds,
         [switch]$DisableAI,
-        [string]$OptimisationProfile = 'optimal'
+        [string]$OptimisationProfile = 'optimal',
+        [switch]$Revert
     )
 
     try {
@@ -2244,7 +2344,7 @@ function Start-AutomatedMaintenance {
             }
         }
 
-        Show-ProgressDialog -Status "Initialising Complete PC Setup sequence..." -Indeterminate
+        Show-ProgressDialog -Status "Initialising maintenance sequence..." -Indeterminate
         & $refreshUi -Control $Global:MainProgressForm
 
         if ([string]::IsNullOrWhiteSpace($OptimisationProfile)) {
@@ -2259,6 +2359,8 @@ function Start-AutomatedMaintenance {
 
         $resolvedScriptPaths = @{
             SystemOptimisation = $scriptPaths['SystemOptimisation']
+            WindowsPrivacy = $scriptPaths['WindowsPrivacy']
+            DisableMSOnline = $scriptPaths['DisableMSOnline']
             VisualOptimisation = $scriptPaths['VisualOptimisation']
             UserCleaner = $scriptPaths['UserCleaner']
             DefenderFix = $scriptPaths['DefenderFix']
@@ -2294,12 +2396,21 @@ function Start-AutomatedMaintenance {
         }
 
         $systemOptimisationArguments = @('--automated', '--profile', $OptimisationProfile)
+        $windowsPrivacyArguments = @('--automated', '--profile', $OptimisationProfile)
         if ($DisableAI) {
-            $systemOptimisationArguments += '--disable-ai'
+            $windowsPrivacyArguments += '--disable-ai'
         }
 
         $systemOptimisationTask = {
             & $runExternalScript -ScriptPath $resolvedScriptPaths.SystemOptimisation -ArgumentList $systemOptimisationArguments
+        }.GetNewClosure()
+
+        $windowsPrivacyTask = {
+            & $runExternalScript -ScriptPath $resolvedScriptPaths.WindowsPrivacy -ArgumentList $windowsPrivacyArguments
+        }.GetNewClosure()
+
+        $disableMSOnlineTask = {
+            & $runExternalScript -ScriptPath $resolvedScriptPaths.DisableMSOnline -ArgumentList @('--automated')
         }.GetNewClosure()
 
         $visualOptimisationTask = {
@@ -2347,6 +2458,8 @@ function Start-AutomatedMaintenance {
             @{ Id = 'DelProf'; Name = 'Delete User Profiles'; Script = $Scripts.DelProf; Weight = 8; Default = $false }
             @{ Id = 'VisualOptimisation'; Name = 'Visual Optimisation'; Script = $visualOptimisationTask; Weight = 8; Default = $false }
             @{ Id = 'SystemOptimisation'; Name = 'System Optimisation'; Script = $systemOptimisationTask; Weight = 18; Default = $true }
+            @{ Id = 'WindowsPrivacy'; Name = 'Windows Privacy'; Script = $windowsPrivacyTask; Weight = 16; Default = $true }
+            @{ Id = 'DisableMSOnline'; Name = 'Disable MS Account Prompts'; Script = $disableMSOnlineTask; Weight = 10; Default = $true }
             @{ Id = 'FixWindowsDefender'; Name = 'Fix Windows Defender'; Script = $fixDefenderTask; Weight = 12; Default = $false }
             @{ Id = 'WindowsTroubleshooting'; Name = 'Windows Troubleshooting'; Script = $troubleshootingTask; Weight = 8; Default = $false }
             @{ Id = 'CustomChanges'; Name = 'Custom Changes Panel'; Script = $customChangesTask; Weight = 6; Default = $false }
@@ -2368,9 +2481,30 @@ function Start-AutomatedMaintenance {
         }
 
         if (-not $maintenanceTasks -or $maintenanceTasks.Count -eq 0) {
-            Show-ProgressDialog -Status "No Complete PC Setup tasks were selected." -PercentComplete 0
+            Show-ProgressDialog -Status "No tasks were selected." -PercentComplete 0
             & $refreshUi -Control $Global:MainProgressForm
             return
+        }
+
+        # Revert mode support: remap selected tasks to their Revert-*.ps1 counterparts (or GenericNoOp for one-way actions)
+        if ($Revert) {
+            $remapped = @()
+            foreach ($taskEntry in $maintenanceTasks) {
+                $rid = $taskEntry.Id
+                $rPath = Join-Path $ScriptRoot "Scripts\Revert-$rid.ps1"
+                if (-not (Test-Path $rPath)) {
+                    $rPath = Join-Path $ScriptRoot "Scripts\Revert-GenericNoOp.ps1"
+                }
+                $remapped += [pscustomobject]@{
+                    Id = $rid
+                    Name = "Revert $($taskEntry.Name)"
+                    Script = [scriptblock]::Create("
+                        & `$runExternalScript -ScriptPath '$rPath' -ArgumentList @('--automated')
+                    ")
+                    Weight = $taskEntry.Weight
+                }
+            }
+            $maintenanceTasks = $remapped
         }
 
         $totalTasks = $maintenanceTasks.Count
@@ -2396,13 +2530,13 @@ function Start-AutomatedMaintenance {
             & $refreshUi -Control $Global:MainProgressForm
         }
 
-        Show-ProgressDialog -Status "Complete PC Setup finished successfully." -PercentComplete 100
+        Show-ProgressDialog -Status "Maintenance finished successfully." -PercentComplete 100
         & $refreshUi -Control $Global:MainProgressForm
     } catch {
-        Write-Host "Error during Complete PC Setup: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "Error during maintenance run: $($_.Exception.Message)" -ForegroundColor Red
         [System.Windows.Forms.MessageBox]::Show(
-            "Complete PC Setup encountered an error: $($_.Exception.Message)",
-            'Windows Maintenance - Complete Setup Error',
+            "Maintenance run encountered an error: $($_.Exception.Message)",
+            'Windows Maintenance - Error',
             'OK',
             'Error'
         ) | Out-Null
@@ -2411,21 +2545,12 @@ function Start-AutomatedMaintenance {
     }
 }
 
-# Complete PC Setup button - runs everything for a fully optimized system
-Add-MaintenanceButton "Complete PC Setup" (New-Object System.Drawing.Point($leftButtonX, $currentY)) {
-    $setupPlan = Show-CompleteSetupPlanner
-
-    if ($setupPlan -and $setupPlan.Confirmed) {
-        Start-AutomatedMaintenance -SelectedTaskIds $setupPlan.SelectedTaskIds -DisableAI:$setupPlan.DisableAI -OptimisationProfile $setupPlan.OptimisationProfile
-    }
-} "Special" "Open the guided planner to run a full setup sequence with preset profiles, detailed task explanations, and optional AI disablement." -Column 0
-
-$currentY += 70
+# (Old grid Complete PC Setup button and layout vars removed - selector is now the main UI in the single window, host hidden.)
 
 # Enhanced Exit button with better positioning
 $ExitButton = New-Object System.Windows.Forms.Button -Property @{
     Text = 'Exit Application'
-    Location = New-Object System.Drawing.Point((($formWidth - 130) / 2), $currentY)
+    Location = New-Object System.Drawing.Point((($formWidth - 130) / 2), 700)  # fixed
     Size = New-Object System.Drawing.Size(130, 35)
     DialogResult = [System.Windows.Forms.DialogResult]::Cancel
     Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
@@ -2442,60 +2567,48 @@ $Form.CancelButton = $ExitButton
 # Status bar for additional information
 $statusBar = New-Object System.Windows.Forms.StatusStrip
 $statusLabel = New-Object System.Windows.Forms.ToolStripStatusLabel
-$statusLabel.Text = "Ready: select a maintenance operation to view progress and apply changes safely."
+$statusLabel.Text = "Ready: use the presets in the task selector to run maintenance operations."
 $statusLabel.Spring = $true
 $statusBar.Items.Add($statusLabel)
 $Form.Controls.Add($statusBar)
 
 $updateMainLayout = {
-    $mainMargin = 30
-    $columnGap = 20
-    $usableWidth = [Math]::Max(520, ($Form.ClientSize.Width - ($mainMargin * 2)))
-    $dynamicButtonWidth = [Math]::Floor(($usableWidth - ($columnGap * 2)) / 3)
-    $dynamicButtonHeight = [Math]::Max(42, [int]([Math]::Ceiling($Form.Font.GetHeight() + 24)))
-    if ($dynamicButtonWidth -lt 165) {
-        $dynamicButtonWidth = 165
-    }
-
-    $leftX = $mainMargin
-    $middleX = $leftX + $dynamicButtonWidth + $columnGap
-    $rightX = $middleX + $dynamicButtonWidth + $columnGap
-
     $headerPanel.Size = New-Object System.Drawing.Size(($Form.ClientSize.Width - 20), 60)
     $subTitleLabel.Size = New-Object System.Drawing.Size([Math]::Max(220, ($headerPanel.Width - 430)), 20)
     $subTitleLabel.Location = New-Object System.Drawing.Point(($headerPanel.Width - $subTitleLabel.Width - 15), 20)
 
     $instructionsLabel.Size = New-Object System.Drawing.Size(($Form.ClientSize.Width - 40), 32)
-    $summaryPanel.Size = New-Object System.Drawing.Size(($Form.ClientSize.Width - 40), 48)
-    $summaryLabel.Size = New-Object System.Drawing.Size(($summaryPanel.Width - 20), 30)
 
-    foreach ($control in $Form.Controls) {
-        if ($control -is [System.Windows.Forms.Label] -and $control.Tag -eq 'SectionLabel') {
-            $control.Size = New-Object System.Drawing.Size(($Form.ClientSize.Width - 60), 25)
-        }
+    if ($summaryPanel) {
+        $summaryPanel.Size = New-Object System.Drawing.Size(($Form.ClientSize.Width - 40), 48)
+        $summaryLabel.Size = New-Object System.Drawing.Size(($summaryPanel.Width - 20), 30)
     }
 
-    foreach ($buttonMeta in $mainActionButtons) {
-        $buttonControl = $buttonMeta.Button
-        if (-not $buttonControl -or $buttonControl.IsDisposed) {
-            continue
-        }
-
-        $buttonControl.Size = New-Object System.Drawing.Size($dynamicButtonWidth, $dynamicButtonHeight)
-
-        switch ($buttonMeta.Column) {
-            0 { $buttonControl.Location = New-Object System.Drawing.Point($leftX, $buttonControl.Location.Y) }
-            1 { $buttonControl.Location = New-Object System.Drawing.Point($middleX, $buttonControl.Location.Y) }
-            2 { $buttonControl.Location = New-Object System.Drawing.Point($rightX, $buttonControl.Location.Y) }
-            default { $buttonControl.Location = New-Object System.Drawing.Point($leftX, $buttonControl.Location.Y) }
-        }
-    }
+    # Selector UI is embedded/handled in the planner. No old grid.
 
     $ExitButton.Location = New-Object System.Drawing.Point(([Math]::Floor(($Form.ClientSize.Width - $ExitButton.Width) / 2)), $ExitButton.Location.Y)
-    $Form.AutoScrollMinSize = New-Object System.Drawing.Size(($Form.ClientSize.Width - 20), ($currentY + 120))
+    $Form.AutoScrollMinSize = New-Object System.Drawing.Size(($Form.ClientSize.Width - 20), 800)
 }
 
-$Form.Add_Shown({ & $updateMainLayout })
+$Form.Add_Shown({ 
+    & $updateMainLayout 
+    # Launch the task selector (planner UI titled "Windows Maintenance") as the primary visible interface.
+    # The host is hidden so the user sees only one window (the selector is the "main menu").
+    # After each automation run completes, return to the selector so the user can run additional presets or exit cleanly.
+    $Form.Visible = $false
+    while ($true) {
+        $selection = Show-CompleteSetupPlanner
+        if (-not $selection -or -not $selection.Confirmed -or -not $selection.SelectedTaskIds -or $selection.SelectedTaskIds.Count -eq 0) {
+            break  # Cancel or close in the selector -> end the session
+        }
+        Start-AutomatedMaintenance -SelectedTaskIds $selection.SelectedTaskIds -DisableAI:([bool]$selection.DisableAI) -OptimisationProfile ([string]$selection.OptimisationProfile) -Revert:([bool]$selection.Revert)
+        # Re-show the selector (return to main menu) after the run finishes. Progress dialog is closed by the automation.
+    }
+    # User chose to exit (cancelled the selector)
+    if ($Form -and -not $Form.IsDisposed) {
+        try { $Form.Close() } catch {}
+    }
+})
 $Form.Add_Resize({ & $updateMainLayout })
 
 # Ensure no progress dialog is left open when the main form is closed.
@@ -2514,7 +2627,7 @@ $Form.Add_FormClosing({
 })
 
 # Ensure the full main layout remains reachable even on lower-resolution displays.
-$Form.AutoScrollMinSize = New-Object System.Drawing.Size(($formWidth - 20), ($currentY + 120))
+$Form.AutoScrollMinSize = New-Object System.Drawing.Size(($formWidth - 20), 800)  # fixed, old grid gone
 
 # Handle command line parameters for automation
 if ($args -contains "-AutoMaintenance") {
@@ -2538,8 +2651,8 @@ try {
     }
     
     if ($DebugMode) { Write-DebugMessage "Showing main form" "INFO" }
-    $formResult = $Form.ShowDialog()
-    if ($DebugMode) { Write-DebugMessage "Form closed with result: $formResult" "INFO" }
+    $null = $Form.ShowDialog()
+    if ($DebugMode) { Write-DebugMessage "Form closed with result" "INFO" }
     
 } catch {
     Write-DebugMessage "Error showing form: $($_.Exception.Message)" "ERROR"
@@ -2563,8 +2676,6 @@ try {
     } catch {
         if ($DebugMode) { Write-DebugMessage "Error during cleanup: $($_.Exception.Message)" "WARN" }
     }
-
-    $ExitButton.Location = New-Object System.Drawing.Point([Math]::Max(10, [int](($Form.ClientSize.Width - $ExitButton.Width) / 2)), $ExitButton.Location.Y)
 }
 
 Write-Host "Windows Maintenance Tool session ended." -ForegroundColor Cyan

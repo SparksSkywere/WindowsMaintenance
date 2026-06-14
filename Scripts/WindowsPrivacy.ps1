@@ -1,0 +1,623 @@
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+# Windows Privacy hardening module
+# Supports both interactive and automated execution.
+
+$AutomatedMode = $args -contains '--automated'
+$DisableAIMode = $args -contains '--disable-ai'
+$OptimizationProfile = 'optimal'
+
+for ($argIndex = 0; $argIndex -lt $args.Count; $argIndex++) {
+    $argValue = [string]$args[$argIndex]
+
+    if ($argValue -eq '--profile' -and ($argIndex + 1) -lt $args.Count) {
+        $OptimizationProfile = [string]$args[$argIndex + 1]
+        $argIndex++
+        continue
+    }
+
+    if ($argValue.StartsWith('--profile=')) {
+        $OptimizationProfile = $argValue.Substring(10)
+    }
+}
+
+if ([string]::IsNullOrWhiteSpace($OptimizationProfile)) {
+    $OptimizationProfile = 'optimal'
+} else {
+    $OptimizationProfile = $OptimizationProfile.ToLowerInvariant()
+}
+
+if ($OptimizationProfile -notin @('minimal', 'optimal', 'aggressive')) {
+    $OptimizationProfile = 'optimal'
+}
+
+function Write-PrivacyStatus {
+    param([string]$Message)
+    Write-Host $Message
+}
+
+function Invoke-PrivacyStep {
+    param(
+        [scriptblock]$Block,
+        [string]$Description
+    )
+
+    try {
+        Write-PrivacyStatus "Applying: $Description..."
+        & $Block
+        Write-PrivacyStatus "Completed: $Description"
+    } catch {
+        Write-PrivacyStatus "Error during $Description : $($_.Exception.Message)"
+    }
+}
+
+function Disable-PrivacyServices {
+    Invoke-PrivacyStep {
+        $servicesToDisable = @(
+            'DiagTrack',
+            'dmwappushservice',
+            'MapsBroker',
+            'lfsvc',
+            'WpcMonSvc',
+            'SEMgrSvc',
+            'RetailDemo',
+            'wisvc',
+            'DusmSvc'
+        )
+
+        foreach ($serviceName in $servicesToDisable) {
+            $service = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+            if ($service) {
+                Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
+                Set-Service -Name $serviceName -StartupType Disabled -ErrorAction SilentlyContinue
+            }
+        }
+    } 'Privacy-related services'
+}
+
+function Disable-AdvertisingAndTelemetry {
+    Invoke-PrivacyStep {
+        $advertisingPolicyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo'
+        if (-not (Test-Path $advertisingPolicyPath)) { New-Item -Path $advertisingPolicyPath -Force | Out-Null }
+        Set-ItemProperty -Path $advertisingPolicyPath -Name 'DisabledByGroupPolicy' -Value 1 -Force
+
+        $advertisingUserPath = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo'
+        if (-not (Test-Path $advertisingUserPath)) { New-Item -Path $advertisingUserPath -Force | Out-Null }
+        Set-ItemProperty -Path $advertisingUserPath -Name 'Enabled' -Value 0 -Force
+
+        $dataCollectionPaths = @(
+            'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection',
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection'
+        )
+
+        foreach ($path in $dataCollectionPaths) {
+            if (-not (Test-Path $path)) { New-Item -Path $path -Force | Out-Null }
+            Set-ItemProperty -Path $path -Name 'AllowTelemetry' -Value 0 -Force
+        }
+
+        $dcPolicyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection'
+        Set-ItemProperty -Path $dcPolicyPath -Name 'MaxTelemetryAllowed' -Value 0 -Force
+        Set-ItemProperty -Path $dcPolicyPath -Name 'DisableOneSettingsDownloads' -Value 1 -Force
+        Set-ItemProperty -Path $dcPolicyPath -Name 'DoNotShowFeedbackNotifications' -Value 1 -Force
+
+        $winSearchPolicyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search'
+        if (-not (Test-Path $winSearchPolicyPath)) { New-Item -Path $winSearchPolicyPath -Force | Out-Null }
+        Set-ItemProperty -Path $winSearchPolicyPath -Name 'AllowCortana' -Value 0 -Force
+        Set-ItemProperty -Path $winSearchPolicyPath -Name 'AllowCloudSearch' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $winSearchPolicyPath -Name 'AllowSearchToUseLocation' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $winSearchPolicyPath -Name 'DisableWebSearch' -Value 1 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $winSearchPolicyPath -Name 'ConnectedSearchUseWeb' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $winSearchPolicyPath -Name 'EnableDynamicContentInWSB' -Value 0 -Force -ErrorAction SilentlyContinue
+
+        $searchSettingsPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\SearchSettings'
+        if (-not (Test-Path $searchSettingsPath)) { New-Item -Path $searchSettingsPath -Force | Out-Null }
+        Set-ItemProperty -Path $searchSettingsPath -Name 'IsDynamicSearchBoxEnabled' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $searchSettingsPath -Name 'IsAADCloudSearchEnabled' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $searchSettingsPath -Name 'IsMSACloudSearchEnabled' -Value 0 -Force -ErrorAction SilentlyContinue
+
+        $searchPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Search'
+        if (-not (Test-Path $searchPath)) { New-Item -Path $searchPath -Force | Out-Null }
+        Set-ItemProperty -Path $searchPath -Name 'BingSearchEnabled' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $searchPath -Name 'CortanaConsent' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $searchPath -Name 'AllowSearchToUseLocation' -Value 0 -Force -ErrorAction SilentlyContinue
+
+        $autologgerPath = 'HKLM:\SYSTEM\CurrentControlSet\Control\WMI\Autologger\AutoLogger-Diagtrack-Listener'
+        if (Test-Path $autologgerPath) {
+            Set-ItemProperty -Path $autologgerPath -Name 'Start' -Value 0 -Force -ErrorAction SilentlyContinue
+        }
+    } 'Advertising and telemetry policies'
+}
+
+function Disable-BackgroundApps {
+    Invoke-PrivacyStep {
+        $backgroundPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\BackgroundAccessApplications'
+        if (-not (Test-Path $backgroundPath)) { New-Item -Path $backgroundPath -Force | Out-Null }
+        Set-ItemProperty -Path $backgroundPath -Name 'GlobalUserDisabled' -Value 1 -Type DWord -Force
+
+        Get-AppxPackage | ForEach-Object {
+            $appPath = "$backgroundPath\$($_.PackageFullName)"
+            if (-not (Test-Path $appPath)) { New-Item -Path $appPath -Force | Out-Null }
+            Set-ItemProperty -Path $appPath -Name 'BackgroundAccess' -Value 0 -Type DWord -ErrorAction SilentlyContinue
+        }
+
+        $appPrivacyPolicyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy'
+        if (-not (Test-Path $appPrivacyPolicyPath)) { New-Item -Path $appPrivacyPolicyPath -Force | Out-Null }
+        Set-ItemProperty -Path $appPrivacyPolicyPath -Name 'LetAppsRunInBackground' -Value 2 -Force
+    } 'Background app restrictions'
+}
+
+function Set-CorePrivacyPolicies {
+    Invoke-PrivacyStep {
+        $siufPath = 'HKCU:\SOFTWARE\Microsoft\Siuf\Rules'
+        if (-not (Test-Path $siufPath)) { New-Item -Path $siufPath -Force | Out-Null }
+        Set-ItemProperty -Path $siufPath -Name 'NumberOfSIUFInPeriod' -Value 0 -Force
+        Set-ItemProperty -Path $siufPath -Name 'PeriodInNanoSeconds' -Value 0 -Force
+
+        $privacyPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Privacy'
+        if (-not (Test-Path $privacyPath)) { New-Item -Path $privacyPath -Force | Out-Null }
+        Set-ItemProperty -Path $privacyPath -Name 'TailoredExperiencesWithDiagnosticDataEnabled' -Value 0 -Force
+
+        $inputPath = 'HKCU:\Software\Microsoft\InputPersonalization'
+        if (-not (Test-Path $inputPath)) { New-Item -Path $inputPath -Force | Out-Null }
+        Set-ItemProperty -Path $inputPath -Name 'RestrictImplicitInkCollection' -Value 1 -Force
+        Set-ItemProperty -Path $inputPath -Name 'RestrictImplicitTextCollection' -Value 1 -Force
+
+        $inputStorePath = 'HKCU:\Software\Microsoft\InputPersonalization\TrainedDataStore'
+        if (-not (Test-Path $inputStorePath)) { New-Item -Path $inputStorePath -Force | Out-Null }
+        Set-ItemProperty -Path $inputStorePath -Name 'HarvestContacts' -Value 0 -Force
+
+        $speechPath = 'HKCU:\Software\Microsoft\Speech_OneCore\Settings\VoiceActivation\UserPreferenceForAllApps'
+        if (-not (Test-Path $speechPath)) { New-Item -Path $speechPath -Force | Out-Null }
+        Set-ItemProperty -Path $speechPath -Name 'AgentActivationEnabled' -Value 0 -Force
+
+        $speechPrivacyPath = 'HKCU:\Software\Microsoft\Speech_OneCore\Settings\OnlineSpeechPrivacy'
+        if (-not (Test-Path $speechPrivacyPath)) { New-Item -Path $speechPrivacyPath -Force | Out-Null }
+        Set-ItemProperty -Path $speechPrivacyPath -Name 'HasAccepted' -Value 0 -Force -ErrorAction SilentlyContinue
+
+        $personalizationSettingsPath = 'HKCU:\Software\Microsoft\Personalization\Settings'
+        if (-not (Test-Path $personalizationSettingsPath)) { New-Item -Path $personalizationSettingsPath -Force | Out-Null }
+        Set-ItemProperty -Path $personalizationSettingsPath -Name 'AcceptedPrivacyPolicy' -Value 0 -Force
+
+        $tabletPcPolicyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\TabletPC'
+        if (-not (Test-Path $tabletPcPolicyPath)) { New-Item -Path $tabletPcPolicyPath -Force | Out-Null }
+        Set-ItemProperty -Path $tabletPcPolicyPath -Name 'PreventHandwritingDataSharing' -Value 1 -Force
+
+        $werPolicyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Error Reporting'
+        if (-not (Test-Path $werPolicyPath)) { New-Item -Path $werPolicyPath -Force | Out-Null }
+        Set-ItemProperty -Path $werPolicyPath -Name 'Disabled' -Value 1 -Force
+        Set-ItemProperty -Path $werPolicyPath -Name 'DontSendAdditionalData' -Value 1 -Force
+        Set-ItemProperty -Path $werPolicyPath -Name 'LoggingDisabled' -Value 1 -Force
+
+        $appPrivacyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy'
+        if (-not (Test-Path $appPrivacyPath)) { New-Item -Path $appPrivacyPath -Force | Out-Null }
+        Set-ItemProperty -Path $appPrivacyPath -Name 'LetAppsGetDiagnosticInfo' -Value 2 -Force
+        Set-ItemProperty -Path $appPrivacyPath -Name 'LetAppsAccessAccountInfo' -Value 2 -Force
+        Set-ItemProperty -Path $appPrivacyPath -Name 'LetAppsAccessCalendar' -Value 2 -Force
+        Set-ItemProperty -Path $appPrivacyPath -Name 'LetAppsAccessCallHistory' -Value 2 -Force
+        Set-ItemProperty -Path $appPrivacyPath -Name 'LetAppsAccessContacts' -Value 2 -Force
+        Set-ItemProperty -Path $appPrivacyPath -Name 'LetAppsAccessEmail' -Value 2 -Force
+        Set-ItemProperty -Path $appPrivacyPath -Name 'LetAppsAccessMessaging' -Value 2 -Force
+        Set-ItemProperty -Path $appPrivacyPath -Name 'LetAppsAccessTasks' -Value 2 -Force
+
+        $findMyDevicePath = 'HKLM:\SOFTWARE\Policies\Microsoft\FindMyDevice'
+        if (-not (Test-Path $findMyDevicePath)) { New-Item -Path $findMyDevicePath -Force | Out-Null }
+        Set-ItemProperty -Path $findMyDevicePath -Name 'AllowFindMyDevice' -Value 0 -Force
+
+        $systemPolicyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System'
+        if (-not (Test-Path $systemPolicyPath)) { New-Item -Path $systemPolicyPath -Force | Out-Null }
+        Set-ItemProperty -Path $systemPolicyPath -Name 'EnableActivityFeed' -Value 0 -Force
+        Set-ItemProperty -Path $systemPolicyPath -Name 'PublishUserActivities' -Value 0 -Force
+        Set-ItemProperty -Path $systemPolicyPath -Name 'UploadUserActivities' -Value 0 -Force
+
+        $cloudContentMachinePath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent'
+        if (-not (Test-Path $cloudContentMachinePath)) { New-Item -Path $cloudContentMachinePath -Force | Out-Null }
+        Set-ItemProperty -Path $cloudContentMachinePath -Name 'DisableWindowsConsumerFeatures' -Value 1 -Force
+
+        $cloudContentUserPath = 'HKCU:\SOFTWARE\Policies\Microsoft\Windows\CloudContent'
+        if (-not (Test-Path $cloudContentUserPath)) { New-Item -Path $cloudContentUserPath -Force | Out-Null }
+        Set-ItemProperty -Path $cloudContentUserPath -Name 'DisableTailoredExperiencesWithDiagnosticData' -Value 1 -Force
+
+        Set-ItemProperty -Path $systemPolicyPath -Name 'EnableAppUriHandlers' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $systemPolicyPath -Name 'AllowCrossDeviceClipboard' -Value 0 -Force -ErrorAction SilentlyContinue
+
+        $doPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization'
+        if (-not (Test-Path $doPath)) { New-Item -Path $doPath -Force | Out-Null }
+        Set-ItemProperty -Path $doPath -Name 'DODownloadMode' -Value 99 -Force
+
+        $locationPolicyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors'
+        if (-not (Test-Path $locationPolicyPath)) { New-Item -Path $locationPolicyPath -Force | Out-Null }
+        Set-ItemProperty -Path $locationPolicyPath -Name 'DisableLocation' -Value 1 -Force
+
+        $widgetsPolicyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Dsh'
+        if (-not (Test-Path $widgetsPolicyPath)) { New-Item -Path $widgetsPolicyPath -Force | Out-Null }
+        Set-ItemProperty -Path $widgetsPolicyPath -Name 'AllowNewsAndInterests' -Value 0 -Force
+
+        $feedsPolicyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Feeds'
+        if (-not (Test-Path $feedsPolicyPath)) { New-Item -Path $feedsPolicyPath -Force | Out-Null }
+        Set-ItemProperty -Path $feedsPolicyPath -Name 'EnableFeeds' -Value 0 -Force
+
+        $feedsUserPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Feeds'
+        if (-not (Test-Path $feedsUserPath)) { New-Item -Path $feedsUserPath -Force | Out-Null }
+        Set-ItemProperty -Path $feedsUserPath -Name 'ShellFeedsTaskbarViewMode' -Value 2 -Force -ErrorAction SilentlyContinue
+
+        $explorerAdvancedPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+        if (-not (Test-Path $explorerAdvancedPath)) { New-Item -Path $explorerAdvancedPath -Force | Out-Null }
+        Set-ItemProperty -Path $explorerAdvancedPath -Name 'TaskbarDa' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $explorerAdvancedPath -Name 'Start_TrackDocs' -Value 0 -Force -ErrorAction SilentlyContinue
+        # Disable File Explorer "sync provider" ads / OneDrive / Microsoft 365 upsells (common W11 privacy annoyance)
+        Set-ItemProperty -Path $explorerAdvancedPath -Name 'ShowSyncProviderNotifications' -Value 0 -Force -ErrorAction SilentlyContinue
+
+        $cdmPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'
+        if (-not (Test-Path $cdmPath)) { New-Item -Path $cdmPath -Force | Out-Null }
+        Set-ItemProperty -Path $cdmPath -Name 'RotatingLockScreenEnabled' -Value 0 -Force
+        Set-ItemProperty -Path $cdmPath -Name 'RotatingLockScreenOverlayEnabled' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cdmPath -Name 'SubscribedContent-338387Enabled' -Value 0 -Force
+        Set-ItemProperty -Path $cdmPath -Name 'SubscribedContent-338388Enabled' -Value 0 -Force
+        Set-ItemProperty -Path $cdmPath -Name 'SubscribedContent-338389Enabled' -Value 0 -Force
+        Set-ItemProperty -Path $cdmPath -Name 'SubscribedContent-338393Enabled' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cdmPath -Name 'SubscribedContent-353694Enabled' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cdmPath -Name 'SubscribedContent-353696Enabled' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cdmPath -Name 'SubscribedContent-353698Enabled' -Value 0 -Force
+        Set-ItemProperty -Path $cdmPath -Name 'SoftLandingEnabled' -Value 0 -Force
+        Set-ItemProperty -Path $cdmPath -Name 'SystemPaneSuggestionsEnabled' -Value 0 -Force
+        # Additional W11 ad / offer surfaces (Start recommendations, tips, lockscreen, offers)
+        Set-ItemProperty -Path $cdmPath -Name 'SubscribedContent-310091Enabled' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cdmPath -Name 'SubscribedContent-314563Enabled' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cdmPath -Name 'SubscribedContent-314568Enabled' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cdmPath -Name 'ContentDeliveryAllowed' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cdmPath -Name 'OemPreInstalledAppsEnabled' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cdmPath -Name 'PreInstalledAppsEnabled' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cdmPath -Name 'PreInstalledAppsEverEnabled' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cdmPath -Name 'SilentInstalledAppsEnabled' -Value 0 -Force -ErrorAction SilentlyContinue
+    } 'Core privacy policy hardening'
+}
+
+function Set-ProfilePrivacyPolicies {
+    param([string]$HardeningDepth = 'optimal')
+
+    Invoke-PrivacyStep {
+        if ($HardeningDepth -eq 'aggressive') {
+            $appPrivacyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy'
+            if (-not (Test-Path $appPrivacyPath)) { New-Item -Path $appPrivacyPath -Force | Out-Null }
+
+            $forceDenyValues = @(
+                'LetAppsAccessLocation',
+                'LetAppsAccessNotifications',
+                'LetAppsAccessMotion',
+                'LetAppsAccessRadios',
+                'LetAppsActivateWithVoice',
+                'LetAppsActivateWithVoiceAboveLock',
+                'LetAppsSyncWithDevices',
+                'LetAppsAccessTrustedDevices',
+                'LetAppsRunInBackground'
+            )
+
+            foreach ($valueName in $forceDenyValues) {
+                Set-ItemProperty -Path $appPrivacyPath -Name $valueName -Value 2 -Force -ErrorAction SilentlyContinue
+            }
+
+            $settingSyncPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\SettingSync'
+            if (-not (Test-Path $settingSyncPath)) { New-Item -Path $settingSyncPath -Force | Out-Null }
+            Set-ItemProperty -Path $settingSyncPath -Name 'DisableSettingSync' -Value 2 -Force
+            Set-ItemProperty -Path $settingSyncPath -Name 'DisableSettingSyncUserOverride' -Value 1 -Force
+
+            $ncsiPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\NetworkConnectivityStatusIndicator'
+            if (-not (Test-Path $ncsiPath)) { New-Item -Path $ncsiPath -Force | Out-Null }
+            Set-ItemProperty -Path $ncsiPath -Name 'NoActiveProbe' -Value 1 -Force -ErrorAction SilentlyContinue
+
+            $messagingPath = 'HKCU:\SOFTWARE\Microsoft\Messaging'
+            if (-not (Test-Path $messagingPath)) { New-Item -Path $messagingPath -Force | Out-Null }
+            Set-ItemProperty -Path $messagingPath -Name 'CloudServiceSyncEnabled' -Value 0 -Force -ErrorAction SilentlyContinue
+        }
+    } "Profile privacy policies ($HardeningDepth)"
+}
+
+function Disable-PrivacyScheduledTasks {
+    Invoke-PrivacyStep {
+        $tasks = @(
+            '\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser',
+            '\Microsoft\Windows\Application Experience\ProgramDataUpdater',
+            '\Microsoft\Windows\Customer Experience Improvement Program\Consolidator',
+            '\Microsoft\Windows\Customer Experience Improvement Program\KernelCeipTask',
+            '\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip',
+            '\Microsoft\Windows\Feedback\Siuf\DmClient',
+            '\Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload'
+        )
+
+        foreach ($taskPath in $tasks) {
+            try {
+                # Use modern cmdlet for reliability and to avoid "does not exist" console spam on some builds
+                $taskName = Split-Path -Leaf $taskPath
+                $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+                if ($task) {
+                    Disable-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue | Out-Null
+                }
+            } catch {
+                # Ignore individual missing or protected tasks (common on some Windows 11 SKUs)
+            }
+        }
+    } 'Privacy telemetry scheduled tasks'
+}
+
+function Disable-AdsAndRecommendations {
+    Invoke-PrivacyStep {
+        # Explicit File Explorer ad suppression (sync provider / OneDrive upsell notifications)
+        $explorerAdvancedPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+        if (-not (Test-Path $explorerAdvancedPath)) { New-Item -Path $explorerAdvancedPath -Force | Out-Null }
+        Set-ItemProperty -Path $explorerAdvancedPath -Name 'ShowSyncProviderNotifications' -Value 0 -Force -ErrorAction SilentlyContinue
+
+        # Start menu recommendations / tips (the prominent "Show recommendations for tips, shortcuts, new apps, and more")
+        $startPersonalization = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+        if (-not (Test-Path $startPersonalization)) { New-Item -Path $startPersonalization -Force | Out-Null }
+        # Multiple values help cover different Start surfaces on 24H2+
+        Set-ItemProperty -Path $startPersonalization -Name 'Start_Recommendations' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $startPersonalization -Name 'Start_IrisRecommendations' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+
+        # Notification center / system suggested tips and ads
+        $notifRoot = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings'
+        if (Test-Path $notifRoot) {
+            $suggested = "$notifRoot\Windows.SystemToast.Suggested"
+            if (-not (Test-Path $suggested)) { New-Item -Path $suggested -Force | Out-Null }
+            Set-ItemProperty -Path $suggested -Name 'Enabled' -Value 0 -Force -ErrorAction SilentlyContinue
+        }
+
+        # Additional notification suppression for tips/suggestions
+        $sysNotif = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+        if (-not (Test-Path $sysNotif)) { New-Item -Path $sysNotif -Force | Out-Null }
+        # These reduce "Get tips and suggestions" style surfaces
+        Set-ItemProperty -Path $sysNotif -Name 'ShowSyncProviderNotifications' -Value 0 -Force -ErrorAction SilentlyContinue
+
+        # Lock screen / spotlight ads and consumer offers (supplements CDM values)
+        $lockPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'
+        if (-not (Test-Path $lockPath)) { New-Item -Path $lockPath -Force | Out-Null }
+        Set-ItemProperty -Path $lockPath -Name 'RotatingLockScreenOverlayEnabled' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $lockPath -Name 'SubscribedContent-338393Enabled' -Value 0 -Force -ErrorAction SilentlyContinue
+
+        Write-PrivacyStatus 'Shell ads, Start recommendations, Explorer sync ads, and notification suggestions suppressed.'
+    } 'Current Windows 11 ads, recommendations, and notification surfaces'
+}
+
+function Block-MicrosoftTelemetryAndFeedback {
+    Invoke-PrivacyStep {
+        # Hard outbound blocks for Microsoft telemetry, diagnostic, and feedback endpoints.
+        # This ensures NO feedback / optional-or-required diagnostic data leaves the machine,
+        # even if the in-Settings "basic" / Required data level is chosen or policies are reset by updates.
+        # Also reduces background network usage to Microsoft services.
+        # Combines hosts file (domain-level sink for all apps) + Windows Firewall outbound rules (IP snapshot at apply time for svchost/connected user experiences).
+
+        $telemetryDomains = @(
+            # Core Connected User Experiences / Telemetry (DiagTrack / CEIP)
+            'vortex.data.microsoft.com',
+            'vortex-win.data.microsoft.com',
+            'v10.events.data.microsoft.com',
+            'v10c.events.data.microsoft.com',
+            'v10.vortex-win.data.microsoft.com',
+            'settings-win.data.microsoft.com',
+            # Watson / error & diagnostic telemetry
+            'watson.telemetry.microsoft.com',
+            'telecommand.telemetry.microsoft.com',
+            'sqm.telemetry.microsoft.com',
+            'oca.telemetry.microsoft.com',
+            'vortex-sandbox.data.microsoft.com',
+            # Feedback surfaces (search, Windows) - explicit user request: even "basic" must send nothing
+            'feedback.search.microsoft.com',
+            'feedback.windows.com'   # feedback endpoints - block even basic level per request
+        )
+
+        # --- Hosts file domain blocking (persistent, works regardless of process or direct IP attempts) ---
+        $hostsPath = Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'
+        $markerStart = '# >>> WindowsMaintenance-Telemetry-Block START'
+        $markerEnd   = '# >>> WindowsMaintenance-Telemetry-Block END'
+
+        $currentHosts = @()
+        if (Test-Path $hostsPath) {
+            $currentHosts = Get-Content -Path $hostsPath -ErrorAction SilentlyContinue
+        }
+
+        # Strip any previous version of our block so we can refresh the list cleanly
+        $cleanedHosts = @()
+        $insideOurBlock = $false
+        foreach ($line in $currentHosts) {
+            $trim = $line.Trim()
+            if ($trim -eq $markerStart) { $insideOurBlock = $true; continue }
+            if ($trim -eq $markerEnd)   { $insideOurBlock = $false; continue }
+            if (-not $insideOurBlock) { $cleanedHosts += $line }
+        }
+
+        $ourBlock = @($markerStart)
+        foreach ($d in $telemetryDomains) {
+            $ourBlock += "0.0.0.0`t$d"
+            $ourBlock += "::1`t$d"
+        }
+        $ourBlock += $markerEnd
+
+        $finalHosts = $cleanedHosts + $ourBlock
+        try {
+            Set-Content -Path $hostsPath -Value ($finalHosts -join [Environment]::NewLine) -Force -Encoding ASCII -ErrorAction Stop
+            # Hosts update is silent in console (GUI progress reports the step); no note needed
+        } catch {
+            # Non-fatal for console-only users; hosts block is best-effort. GUI shows overall completion.
+        }
+
+        # --- Windows Firewall outbound block rules (supplemental layer on resolved IPs for TCP 443) ---
+        # Named with WM-BlockTelemetry- prefix so revert can cleanly remove them without touching user rules.
+        foreach ($domain in $telemetryDomains) {
+            try {
+                $dnsResults = Resolve-DnsName -Name $domain -Type A_AAAA -ErrorAction Stop
+                $rawIps = @($dnsResults | ForEach-Object {
+                    if ($_.PSObject.Properties.Match('IPAddress').Count -gt 0 -and $_.IPAddress) {
+                        $_.IPAddress
+                    }
+                } | Select-Object -Unique)
+                # Filter out unspecified, loopback, link-local, multicast, and other unsuitable addresses
+                # that cause "An unspecified, multicast, broadcast or loopback IPv6 address was specified" errors.
+                $ipList = @($rawIps | Where-Object {
+                    $ip = [string]$_
+                    if (-not $ip) { return $false }
+                    if ($ip -eq '0.0.0.0' -or $ip -eq '::' -or $ip -eq '::1') { return $false }
+                    if ($ip -match '^fe[89ab]:' -or $ip -match '^ff[0-9a-f]:') { return $false }  # link-local / multicast v6
+                    if ($ip -match '^127\.|^169\.254\.|^224\.|^239\.|^::ffff:') { return $false }
+                    $true
+                })
+                if ($ipList.Count -gt 0) {
+                    $ruleName = "WM-BlockTelemetry-$domain"
+                    # Remove any stale rule with same name first (idempotent re-apply)
+                    Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue |
+                        Remove-NetFirewallRule -Confirm:$false -ErrorAction SilentlyContinue
+
+                    New-NetFirewallRule -DisplayName $ruleName `
+                        -Direction Outbound `
+                        -Action Block `
+                        -RemoteAddress $ipList `
+                        -Protocol TCP `
+                        -RemotePort 443 `
+                        -Enabled True `
+                        -Profile Any `
+                        -Group 'Windows Maintenance - Privacy' `
+                        -Description "Block outbound Microsoft telemetry/feedback traffic to $domain. Prevents data exfiltration even at 'basic' diagnostic level. (Auto-created by WindowsMaintenance privacy task)" `
+                        -ErrorAction Stop | Out-Null
+
+                    # Firewall rule creation success is silent here (console-only notes removed per request); overall step reports via progress
+                }
+            } catch {
+                # Non-fatal (e.g. duplicate rule, permission, or IP filter); hosts provides the domain block. No console note emitted.
+            }
+        }
+
+        Write-PrivacyStatus 'Microsoft telemetry, diagnostic events, Watson, and all feedback endpoints are now hard-blocked at hosts + firewall level.'
+    } 'Hard block Microsoft telemetry & feedback (hosts + outbound firewall rules)'
+}
+
+function Disable-WindowsAI {
+    Invoke-PrivacyStep {
+        Write-PrivacyStatus 'Disabling Windows AI features, Copilot integrations, and cloud-assisted search...'
+
+        $explorerAdvancedPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+        if (-not (Test-Path $explorerAdvancedPath)) { New-Item -Path $explorerAdvancedPath -Force | Out-Null }
+        Set-ItemProperty -Path $explorerAdvancedPath -Name 'ShowCopilotButton' -Value 0 -Force
+        Set-ItemProperty -Path $explorerAdvancedPath -Name 'DisabledHotkeys' -Value 'C' -Force
+
+        $searchSettingsPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\SearchSettings'
+        if (-not (Test-Path $searchSettingsPath)) { New-Item -Path $searchSettingsPath -Force | Out-Null }
+        Set-ItemProperty -Path $searchSettingsPath -Name 'IsCopilotEnabled' -Value 0 -Force
+        Set-ItemProperty -Path $searchSettingsPath -Name 'IsCopilotAvailable' -Value 0 -Force
+        Set-ItemProperty -Path $searchSettingsPath -Name 'IsDynamicSearchBoxEnabled' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $searchSettingsPath -Name 'IsAADCloudSearchEnabled' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $searchSettingsPath -Name 'IsMSACloudSearchEnabled' -Value 0 -Force -ErrorAction SilentlyContinue
+
+        $searchPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Search'
+        if (-not (Test-Path $searchPath)) { New-Item -Path $searchPath -Force | Out-Null }
+        Set-ItemProperty -Path $searchPath -Name 'BingSearchEnabled' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $searchPath -Name 'CortanaConsent' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $searchPath -Name 'AllowSearchToUseLocation' -Value 0 -Force -ErrorAction SilentlyContinue
+
+        $copilotPolicyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot'
+        if (-not (Test-Path $copilotPolicyPath)) { New-Item -Path $copilotPolicyPath -Force | Out-Null }
+        Set-ItemProperty -Path $copilotPolicyPath -Name 'TurnOffWindowsCopilot' -Value 1 -Force
+
+        $copilotUserPolicyPath = 'HKCU:\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot'
+        if (-not (Test-Path $copilotUserPolicyPath)) { New-Item -Path $copilotUserPolicyPath -Force | Out-Null }
+        Set-ItemProperty -Path $copilotUserPolicyPath -Name 'TurnOffWindowsCopilot' -Value 1 -Force
+
+        $windowsAIPolicyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsAI'
+        if (-not (Test-Path $windowsAIPolicyPath)) { New-Item -Path $windowsAIPolicyPath -Force | Out-Null }
+        Set-ItemProperty -Path $windowsAIPolicyPath -Name 'DisableAIDataAnalysis' -Value 1 -Force
+        Set-ItemProperty -Path $windowsAIPolicyPath -Name 'DisableSettingsAgent' -Value 1 -Force
+
+        $explorerPolicyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer'
+        if (-not (Test-Path $explorerPolicyPath)) { New-Item -Path $explorerPolicyPath -Force | Out-Null }
+        Set-ItemProperty -Path $explorerPolicyPath -Name 'DisableSearchBoxSuggestions' -Value 1 -Force
+
+        $speechPolicyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Speech'
+        if (-not (Test-Path $speechPolicyPath)) { New-Item -Path $speechPolicyPath -Force | Out-Null }
+        Set-ItemProperty -Path $speechPolicyPath -Name 'AllowOnlineSpeechRecognition' -Value 0 -Force
+
+        $inputPersonalizationPolicyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\InputPersonalization'
+        if (-not (Test-Path $inputPersonalizationPolicyPath)) { New-Item -Path $inputPersonalizationPolicyPath -Force | Out-Null }
+        Set-ItemProperty -Path $inputPersonalizationPolicyPath -Name 'AllowInputPersonalization' -Value 0 -Force
+
+        $inputPersonalizationPath = 'HKCU:\Software\Microsoft\InputPersonalization'
+        if (-not (Test-Path $inputPersonalizationPath)) { New-Item -Path $inputPersonalizationPath -Force | Out-Null }
+        Set-ItemProperty -Path $inputPersonalizationPath -Name 'RestrictImplicitInkCollection' -Value 1 -Force
+        Set-ItemProperty -Path $inputPersonalizationPath -Name 'RestrictImplicitTextCollection' -Value 1 -Force
+
+        $trainedDataStorePath = 'HKCU:\Software\Microsoft\InputPersonalization\TrainedDataStore'
+        if (-not (Test-Path $trainedDataStorePath)) { New-Item -Path $trainedDataStorePath -Force | Out-Null }
+        Set-ItemProperty -Path $trainedDataStorePath -Name 'HarvestContacts' -Value 0 -Force
+
+        $speechPrivacyPath = 'HKCU:\Software\Microsoft\Speech_OneCore\Settings\OnlineSpeechPrivacy'
+        if (-not (Test-Path $speechPrivacyPath)) { New-Item -Path $speechPrivacyPath -Force | Out-Null }
+        Set-ItemProperty -Path $speechPrivacyPath -Name 'HasAccepted' -Value 0 -Force -ErrorAction SilentlyContinue
+
+        $voiceActivationPath = 'HKCU:\Software\Microsoft\Speech_OneCore\Settings\VoiceActivation\UserPreferenceForAllApps'
+        if (-not (Test-Path $voiceActivationPath)) { New-Item -Path $voiceActivationPath -Force | Out-Null }
+        Set-ItemProperty -Path $voiceActivationPath -Name 'AgentActivationEnabled' -Value 0 -Force -ErrorAction SilentlyContinue
+
+        $cloudContentPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent'
+        if (-not (Test-Path $cloudContentPath)) { New-Item -Path $cloudContentPath -Force | Out-Null }
+        Set-ItemProperty -Path $cloudContentPath -Name 'DisableWindowsConsumerFeatures' -Value 1 -Force
+
+        try {
+            $aiPackages = Get-AppxPackage -AllUsers | Where-Object {
+                $_.Name -like '*Copilot*' -or
+                $_.Name -like '*WindowsAI*' -or
+                $_.Name -eq 'Microsoft.BingSearch' -or
+                $_.Name -eq 'Microsoft.549981C3F5F10'
+            }
+
+            foreach ($package in $aiPackages) {
+                Remove-AppxPackage -Package $package.PackageFullName -AllUsers -ErrorAction SilentlyContinue
+            }
+        } catch {
+            Write-PrivacyStatus "AI package removal skipped: $($_.Exception.Message)"
+        }
+
+        Stop-Process -Name Copilot -Force -ErrorAction SilentlyContinue
+        Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
+        Stop-Process -Name SearchApp -Force -ErrorAction SilentlyContinue
+        Stop-Process -Name SearchHost -Force -ErrorAction SilentlyContinue
+        Stop-Process -Name StartMenuExperienceHost -Force -ErrorAction SilentlyContinue
+
+        Start-Sleep -Seconds 3
+        Start-Process explorer.exe
+    } 'Disable Windows AI'
+}
+
+function Invoke-WindowsPrivacy {
+    Write-PrivacyStatus 'Starting Windows privacy hardening...'
+
+    Disable-PrivacyServices
+    Disable-AdvertisingAndTelemetry
+    Disable-BackgroundApps
+    Set-CorePrivacyPolicies
+    Disable-PrivacyScheduledTasks
+    Set-ProfilePrivacyPolicies -HardeningDepth $OptimizationProfile
+    Disable-AdsAndRecommendations
+    Block-MicrosoftTelemetryAndFeedback
+
+    if ($DisableAIMode) {
+        Disable-WindowsAI
+    }
+
+    Write-PrivacyStatus 'Windows privacy hardening completed.'
+}
+
+try {
+    Invoke-WindowsPrivacy
+
+    if (-not $AutomatedMode) {
+        Add-Type -AssemblyName System.Windows.Forms
+        [System.Windows.Forms.MessageBox]::Show(
+            'Windows privacy hardening completed. Some changes may require sign-out or restart to fully apply.',
+            'Windows Privacy',
+            'OK',
+            'Information'
+        ) | Out-Null
+    }
+
+    exit 0
+} catch {
+    Write-PrivacyStatus "Windows privacy hardening failed: $($_.Exception.Message)"
+    exit 1
+}

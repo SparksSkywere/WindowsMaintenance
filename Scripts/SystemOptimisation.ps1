@@ -28,6 +28,7 @@ if ($OptimizationProfile -notin @("minimal", "optimal", "aggressive")) {
 }
 
 $VisualOptimisationScript = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "VisualOptimisation.ps1"
+$WindowsPrivacyScript = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "WindowsPrivacy.ps1"
 
 # Progress reporting functions for integration with main script
 function Show-Progress {
@@ -1199,24 +1200,6 @@ if ($AutomatedMode) {
     Show-Progress "Starting system optimization..." 0
     Show-Progress "Starting automated profile without visual optimisation..." 10
     
-    # Telemetry and services
-    Show-Progress "Disabling telemetry and unnecessary services..." 30
-    DisableDiagtrack
-    DisableDiagtrack2
-    DisableAdvertisingID
-    DisableTelemetry
-    DisableDataUsage
-    DisableFax
-    DisableParentalControls
-    DisableGeoLocation
-    DisableNFCPayments
-    DisableRetailDemo
-    DisableWindowsInside
-    DisableMapsManager
-    DisableBackgroundApps
-    DisableBackgroundAccess
-    DisableBackgroundAppsPerApp
-    
     # Performance optimizations
     Show-Progress "Applying performance optimizations..." 60
     Optimize-PowerSettings
@@ -1241,27 +1224,6 @@ if ($AutomatedMode) {
     $werService = Get-Service "WerSvc" -ErrorAction SilentlyContinue
     if ($werService) {
         Set-Service "WerSvc" -StartupType Disabled -ErrorAction SilentlyContinue
-    }
-
-    # Scheduled task cleanup
-    Show-Progress "Disabling unnecessary scheduled tasks..." 83
-    Optimize-ScheduledTasks
-
-    # Privacy hardening
-    Show-Progress "Applying privacy hardening..." 86
-    Optimize-Privacy
-
-    # Profile-based deep debloat/privacy tuning
-    Show-Progress "Applying $OptimizationProfile profile deep tuning..." 87
-    Apply-ProfileBasedDebloat -Profile $OptimizationProfile
-
-    # UI cleanup (includes widgets/feeds disable)
-    Show-Progress "Applying UI cleanup and disabling widgets..." 88
-    Optimize-UICleanup
-
-    if ($DisableAIMode) {
-        Show-Progress "Disabling Windows AI features..." 89
-        Disable-WindowsAI
     }
 
     # Additional service cleanup
@@ -1534,20 +1496,29 @@ $DoallAbove = {
         )
 
         & $VisualOptimisation
-        & $Turnoffbackgroundapps
-        & $DisableServices
-        & $DisableTelemetry
         & $PerformanceOptimizations
-        if ($includeAI -eq [System.Windows.Forms.DialogResult]::Yes) {
-            & $DisableWindowsAI
-        }
         & $GamingOptimizations
         & $StorageOptimizations
         & $StartupOptimizations
-        & $ScheduledTasksOptimizations
-        & $PrivacyOptimizations
+
+        if (Test-Path $WindowsPrivacyScript) {
+            $privacyArgs = @('--automated', '--profile', $OptimizationProfile)
+            if ($includeAI -eq [System.Windows.Forms.DialogResult]::Yes) {
+                $privacyArgs += '--disable-ai'
+            }
+
+            Write-Host "Running dedicated Windows Privacy module..." -ForegroundColor Cyan
+            & $WindowsPrivacyScript @privacyArgs
+        } else {
+            Write-Host "Windows Privacy script not found, using in-script privacy routines." -ForegroundColor Yellow
+            & $PrivacyOptimizations
+            if ($includeAI -eq [System.Windows.Forms.DialogResult]::Yes) {
+                & $DisableWindowsAI
+            }
+            & $UICleanup
+        }
+
         & $AdditionalServicesOptimizations
-        & $UICleanup
         & $RAMOptimizations
         ExecutionCompleted
     } catch {
