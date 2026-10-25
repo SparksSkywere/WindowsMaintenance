@@ -141,7 +141,7 @@ function Remove-ThirdPartyAV {
 # Hardware / Feature Capability Detection
 function Get-HardwareCapabilities {
     $caps = [PSCustomObject]@{
-        VirtualizationEnabled   = $false
+        VirtualisationEnabled   = $false
         SlatSupported           = $false
         TpmPresent              = $false
         TpmReady                = $false
@@ -161,12 +161,12 @@ function Get-HardwareCapabilities {
     # Virtualisation (VT-x / AMD-V)
     try {
         $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop
-        $caps.VirtualizationEnabled = [bool]$cs.HypervisorPresent
+        $caps.VirtualisationEnabled = [bool]$cs.HypervisorPresent
     } catch {
         Write-Log "Could not query virtualisation support: $_"
     }
 
-    # SLAT (Second Level Address Translation) — required for HVCI
+    # SLAT (Second Level Address Translation) - required for HVCI
     try {
         $proc = Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop | Select-Object -First 1
         # SecondLevelAddressTranslationExtensions property exists on Win10+
@@ -174,7 +174,7 @@ function Get-HardwareCapabilities {
             $caps.SlatSupported = [bool]$proc.SecondLevelAddressTranslationExtensions
         } else {
             # Fall back: assume SLAT on modern hardware if virtualisation is present
-            $caps.SlatSupported = $caps.VirtualizationEnabled
+            $caps.SlatSupported = $caps.VirtualisationEnabled
         }
     } catch {
         Write-Log "Could not query SLAT support: $_"
@@ -203,7 +203,7 @@ function Get-HardwareCapabilities {
     }
 
     # HVCI capability = virtualisation + SLAT + UEFI + TPM (TPM optional but recommended)
-    $caps.HvciCapable = $caps.VirtualizationEnabled -and $caps.SlatSupported -and $caps.UefiEnabled
+    $caps.HvciCapable = $caps.VirtualisationEnabled -and $caps.SlatSupported -and $caps.UefiEnabled
 
     # Credential Guard = same requirements + TPM recommended
     $caps.CredentialGuardCapable = $caps.HvciCapable -and $caps.Win10OrLater
@@ -245,9 +245,9 @@ function Enable-DefenderComponents {
         DisableEmailScanning            = $false   # Email scanning
         DisableRemovableDriveScanning   = $false   # Removable drive scanning
         DisableScanningMappedNetworkDrivesForFullScan = $false
-        MAPSReporting                   = 2        # Advanced MAPS (Cloud protection) — 0=Disabled,1=Basic,2=Advanced
+        MAPSReporting                   = 2        # Advanced MAPS (Cloud protection) - 0=Disabled,1=Basic,2=Advanced
         SubmitSamplesConsent            = 3        # Automatically send safe samples (3 = Send all samples)
-        CloudBlockLevel                 = 6        # High+ cloud block level (0=Default … 6=High+)
+        CloudBlockLevel                 = 6        # High+ cloud block level (0=Default ... 6=High+)
         CloudExtendedTimeout            = 50       # Extra seconds for cloud analysis (0-50)
         EnableNetworkProtection         = 1        # Network Protection: 1=Enabled,2=AuditMode
         PUAProtection                   = 1        # Potentially Unwanted Application: 1=Enabled,2=AuditMode
@@ -350,7 +350,7 @@ function Enable-MemoryIntegrity {
     if (-not $HwCaps.HvciCapable) {
         Write-Log "  [SKIP] Hardware requirements not met for Memory Integrity."
         Write-Log "         Requires: Virtualisation (VT-x/AMD-V) + SLAT + UEFI."
-        Write-Log "         Current: VT=$($HwCaps.VirtualizationEnabled) SLAT=$($HwCaps.SlatSupported) UEFI=$($HwCaps.UefiEnabled)"
+        Write-Log "         Current: VT=$($HwCaps.VirtualisationEnabled) SLAT=$($HwCaps.SlatSupported) UEFI=$($HwCaps.UefiEnabled)"
         return
     }
 
@@ -396,7 +396,7 @@ function Enable-CredentialGuard {
 
     # Check Windows edition (Credential Guard fully supported on Enterprise)
     $edition = (Get-CimInstance Win32_OperatingSystem -ErrorAction SilentlyContinue).OperatingSystemSKU
-    # SKU 4 = Enterprise, 48 = Pro, etc. — we attempt regardless but warn on unsupported editions
+    # SKU 4 = Enterprise, 48 = Pro, etc. We attempt this regardless, and warn on unsupported editions.
     if ($edition -notin @(4, 27, 125, 161)) {
         Write-Log "  [INFO] Credential Guard is fully supported on Enterprise editions. Attempting anyway on SKU $edition."
     }
@@ -433,7 +433,7 @@ function Enable-SmartScreen {
         Write-Log "  [WARN] Could not set SmartScreen for Explorer: $_"
     }
 
-    # SmartScreen policy via AppInstaller / Defender — additional registry keys
+    # SmartScreen policy via AppInstaller / Defender - additional registry keys
     try {
         $ssDefPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System"
         if (-not (Test-Path $ssDefPath)) { New-Item -Path $ssDefPath -Force | Out-Null }
@@ -444,7 +444,7 @@ function Enable-SmartScreen {
         Write-Log "  [WARN] Could not set SmartScreen policy keys: $_"
     }
 
-    # SmartScreen for Microsoft Edge (Chromium) — HKLM policy
+    # SmartScreen for Microsoft Edge (Chromium) - HKLM policy
     try {
         $edgePath = "HKLM:\SOFTWARE\Policies\Microsoft\Edge"
         if (-not (Test-Path $edgePath)) { New-Item -Path $edgePath -Force | Out-Null }
@@ -478,7 +478,7 @@ function Start-DefenderServices {
     $services = @(
         "WinDefend",            # Windows Defender Antivirus
         "SecurityHealthSvc",    # Windows Security Health Service
-        "wscsvc",               # Windows Security Center
+        "wscsvc",               # Windows Security Centre
         "Sense",                # Windows Defender Advanced Threat Protection
         "WdNisSvc",             # Windows Defender Network Inspection Service
         "WdFilter",             # Windows Defender Mini-Filter Driver (kernel, start via sc)
@@ -554,7 +554,7 @@ function Get-DefenderEvents {
             5001 { $issues += "Real-time protection disabled via policy (Event ID: $($evt.Id))" }
             5007 { $issues += "Defender configuration changed (Event ID: $($evt.Id))" }
             default {
-                if ($evt.Level -eq 2) { $issues += "Warning — $($evt.Message) (Event ID: $($evt.Id))" }
+                if ($evt.Level -eq 2) { $issues += "Warning - $($evt.Message) (Event ID: $($evt.Id))" }
             }
         }
     }
@@ -670,7 +670,7 @@ Remove-ThirdPartyAV
 # 1. Hardware capability check
 Write-Log "--- Hardware & Platform Capability Check ---"
 $hwCaps = Get-HardwareCapabilities
-Write-Log "  Virtualisation (VT-x/AMD-V) : $($hwCaps.VirtualizationEnabled)"
+Write-Log "  Virtualisation (VT-x/AMD-V) : $($hwCaps.VirtualisationEnabled)"
 Write-Log "  SLAT supported              : $($hwCaps.SlatSupported)"
 Write-Log "  TPM present / ready         : $($hwCaps.TpmPresent) / $($hwCaps.TpmReady)"
 Write-Log "  Secure Boot enabled         : $($hwCaps.SecureBootEnabled)"

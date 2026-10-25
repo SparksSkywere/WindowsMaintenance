@@ -294,7 +294,7 @@ $troubleshootingCommands = @{
     # ...other commands...
 }
 
-# Optimize command execution
+# Optimise command execution
 function Invoke-TroubleshootingCommand {
     param([scriptblock]$Command)
     

@@ -70,7 +70,7 @@ function Start-VolumeRepair {
             }
         }
         
-        # Create progress dialog
+        # Create progress dialogue
         $progressForm = New-Object System.Windows.Forms.Form
         $progressForm.Text = "Volume Repair - Drive $DriveLetter"
         $progressForm.Size = New-Object System.Drawing.Size(450, 150)
@@ -93,7 +93,7 @@ function Start-VolumeRepair {
         $progressForm.Controls.Add($progressBar)
         
         $statusLabel = New-Object System.Windows.Forms.Label
-        $statusLabel.Text = "Initializing scan..."
+        $statusLabel.Text = "Initialising scan..."
         $statusLabel.Location = New-Object System.Drawing.Point(20, 80)
         $statusLabel.Size = New-Object System.Drawing.Size(400, 20)
         $progressForm.Controls.Add($statusLabel)

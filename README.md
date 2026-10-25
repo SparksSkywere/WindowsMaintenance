@@ -1,78 +1,85 @@
 # Windows Maintenance (PowerShell)
 
-Windows Maintenance is a PowerShell-based graphical tool that provides a single resizable Windows Forms interface for executing maintenance, cleanup, optimization, privacy hardening, and repair operations on Windows 10 and Windows 11 systems. The tool initializes by detecting the Windows version and validating supporting script modules before presenting its primary user interface. All system-modifying operations are designed to run under administrator privileges.
+Windows Maintenance is a PowerShell graphical tool with one resizable Windows Forms window for maintenance, cleanup, optimisation, privacy hardening, and repair on Windows 10 and Windows 11. It initialises by detecting the Windows version and checking its script modules, then opens the task selector. System changes are meant to run with administrator rights.
 
 ## Prerequisites
 
-The tool requires a system running Windows 10 or Windows 11. Administrator privileges are necessary because many operations modify registry keys, services, scheduled tasks, firewall rules, and the system hosts file. PowerShell must be allowed to execute scripts in the current session. The .NET Framework components required for Windows Forms must be present, along with the scheduled task and Windows Firewall cmdlets used by the privacy and reversion modules.
+The PC must be running Windows 10 or Windows 11. Administrator rights are required because the tasks change the registry, services, scheduled tasks, power settings, firewall rules, and DNS policy. PowerShell must be allowed to run scripts for the session. Windows Forms must be available, along with the scheduled task and Windows Firewall cmdlets used by the privacy and revert scripts.
 
-## Launching the tool
+Launch with `RunMaintenance.bat`. That file starts Windows PowerShell 5.1 elevated. You can also run `WindowsMaintenance.ps1` from an elevated PowerShell 5.1 console. If a session blocks scripts, use `Set-ExecutionPolicy Bypass -Scope Process` for that window only.
 
-Launch the tool by running the supplied `RunMaintenance.bat` file or by invoking `WindowsMaintenance.ps1` directly from an elevated PowerShell console. The script performs environment checks, loads task definitions, and displays the main window. The console window is hidden by default during normal operation unless debug mode is enabled. Execution policy changes, if required, should be applied with `Set-ExecutionPolicy Bypass -Force` for the current session only.
+## The task selector
 
-## The task selector interface
+The selector is the main window. A header shows the title. Under it is the Apply / Revert switch, then the preset row, then the checklist.
 
-The main window functions as a single unified interface. A header displays the application title. Below the header is a mode selector strip followed by the preset area and task checklist.
-
-The interface consists of:
-- A mode toggle that switches between Apply and Revert behavior.
-- Preset buttons that populate the task checklist with predefined selections.
-- A scrollable checklist of available tasks on the left.
-- A detail panel on the right that shows the description, expected impact, and guidance for the currently selected task in the checklist.
-
-Users can manually check or uncheck individual tasks before starting execution. The interface supports resizing, and layout elements adjust automatically.
+- Apply runs the ticked tasks. Revert runs the matching undo scripts.
+- Custom is selected when the window opens, and every task starts unticked.
+- Minimal, Optimal, Aggressive, and Fix fill the checklist. You can still tick or untick any task afterwards.
+- The list on the left scrolls. The panel on the right describes the selected task.
+- Switching from Revert back to Apply returns the checklist to Custom, with nothing ticked.
 
 ## Presets
 
-Four presets are provided to quickly configure the task checklist:
+- **Custom** leaves every task unticked so you can build the run yourself.
+- **Minimal** ticks System Cleaner, System Optimisation, Windows Privacy, and Disable MS Account Prompts.
+- **Optimal** adds Windows Install Cleanup and Uninstall OneDrive to the Minimal set.
+- **Aggressive** adds Disable Windows AI, DISM Health Check, System File Check, Disk Check and Repair, and Disk Defragmentation.
+- **Fix** ticks DISM Health Check, System File Check, Disk Check and Repair, Fix Windows Defender, Windows Troubleshooting, System Optimisation, Windows Privacy, Disable MS Account Prompts, and Visual Optimisation.
 
-- Minimal applies a lightweight set of cleanup and baseline optimization tasks.
-- Optimal applies a balanced collection of debloat, cleaning, OneDrive removal, system optimization, privacy hardening, and Microsoft account prompt suppression tasks.
-- Aggressive extends the Optimal set with additional repair operations and enables deeper policy changes, including optional Windows AI feature disablement.
-- Fix selects a comprehensive set of repair and health restoration tasks, including DISM, SFC, disk checks, Defender remediation, and troubleshooting routines, combined with core optimization and privacy steps.
+The extra optimisation tasks below are on the list and stay unticked in every preset.
 
-Presets may be used as starting points. The checklist remains fully editable after a preset is applied.
+## Tasks
 
-## Operation modes
+**Cleanup.** Windows Install Cleanup removes a balanced set of inbox apps and leaves the shell and Store usable. Reinstall Default Apps can put provisioned apps back. Uninstall OneDrive removes OneDrive sync. System Cleaner clears temporary files. User Profile Temp Cleaner and Delete Old User Profiles go further and are left unticked.
 
-The mode selector determines how selected tasks are executed.
+**System Optimisation.** This is the balanced performance bundle. It selects Ultimate Performance when this edition of Windows can create that plan, otherwise High Performance. It turns off power saving for attached network, USB, Bluetooth, audio, mouse, keyboard, and other HID devices, and it tunes USB, PCI Express, disk, processor, sleep, and wireless settings for performance on mains and on battery. Idle sleep, hibernate, and hybrid sleep are set to never. The display timeout is left as it is, and sleep can still be started from the Start menu. It also applies a desktop memory policy, trims idle background use, disables selected scheduled tasks and optional services, and lowers the RAM footprint. On an SSD or NVMe system disk it turns SysMain and prefetch off. A hard disk keeps them. Laptops use more battery. A mouse or keyboard may no longer wake the PC. Restart after this task.
 
-In Apply mode, checked tasks perform their forward operations. These include application removal, service and registry changes for performance and privacy, file cleaning, and repair actions.
+**Separate optimisation tasks.** These call the same script one action at a time:
 
-In Revert mode, the same task entries in the checklist cause execution of the corresponding Revert-*.ps1 scripts. Tasks that lack a dedicated revert implementation fall back to a generic no-op script that reports the limitation. When Revert mode is activated, the checklist is automatically adjusted to prioritize tasks that have explicit reversal support. After execution completes, the selector returns to the interface so additional operations can be performed.
+- Performance Optimisations
+- RAM Footprint
+- Deep RAM
+- Gaming Performance
+- Storage and File System
+- Startup and Boot
+- Task Scheduler Cleanup
+- Additional Services
+- Disable Background Apps
+- Disable Optional Services
+- Disable Telemetry Services
+- UI and Notifications
+- Privacy Hardening
 
-## Task execution
+Deep RAM turns off Hyper-V, Virtual Machine Platform, WSL, Windows Sandbox, and virtualisation-based security. It needs a restart. Leave it unticked unless those features are not required. Storage and File System removes the hibernation file. Additional Services can stop toasts, Windows Hello, nearby sharing, and the mobile hotspot until revert.
 
-When execution is started, a modal progress dialog appears. The dialog displays the current task name, a progress bar, and status text. Tasks execute sequentially.
+**Visual Optimisation** is its own task. It is not part of the System Optimisation bundle. Apply Aerolite Theme only launches the bundled theme file.
 
-Some tasks run as inline script blocks that directly update the progress dialog. Most tasks launch their associated script file (or the Revert variant) in a separate PowerShell process. Child processes are started with the arguments `-NoProfile -ExecutionPolicy Bypass -File <script> --automated`. Output from child processes appears in the console window from which the tool was launched. When the batch completes, the progress dialog closes and the selector reappears.
+**Windows Privacy** sets telemetry, advertising, background-app, and suggestion policies, stops diagnostic services, and disables selected Customer Experience tasks. Telemetry domains are blocked with DNS policy (NRPT) and outbound firewall rules on TCP 443. The hosts file is not rewritten. If an older run left a marked telemetry block in the hosts file, the next privacy run removes that block once.
 
-## Privacy hardening
+**Disable Windows AI** is its own task. It turns off Copilot, Recall, Click to Do, online speech, and cloud-assisted search by policy, and it disables Windows AI scheduled tasks that are present. It does not remove inbox apps, and it does not run as part of Windows Privacy or System Optimisation. Sign out afterwards.
 
-The Windows Privacy task applies registry policies under both HKLM and HKCU paths to restrict telemetry, advertising information, background app access, search web integration, and tailored experiences. It disables or stops diagnostic and consumer-experience services and disables scheduled tasks associated with the Application Experience and Customer Experience Improvement Program.
+**Disable MS Account Prompts** suppresses backup, Microsoft 365, and account upsell reminders for each loaded user. Backup and an existing Microsoft 365 subscription keep working.
 
-The task also suppresses multiple notification, Start menu recommendation, lock screen, and File Explorer surfaces that display suggestions or upsell prompts. In addition, it adds entries to the system hosts file for known Microsoft telemetry and feedback domains and creates outbound Windows Firewall rules that block TCP 443 traffic to the IP addresses resolved for those domains at the time of application. These network-level blocks are intended to prevent diagnostic and feedback data from leaving the system even when the Windows Diagnostics & feedback setting is configured for the Required (basic) level.
+**Repair.** DISM Health Check, System File Check, Disk Check and Repair, and Disk Defragmentation are for machines with faults or mechanical disks. Fix Windows Defender repairs protection when it has been left off or damaged. Windows Troubleshooting covers common network, update, and Store problems.
 
-## Other task categories
+**Custom Changes Panel** opens the optional manual panel. It is not part of any preset.
 
-Additional tasks address application and OneDrive removal, temporary file and profile cache cleaning, power plan and memory management tuning, non-essential service reduction, visual effects and theme changes, DISM component store repair, System File Checker scans, disk error checking and repair, and defragmentation for mechanical drives. Defender remediation and general troubleshooting routines are also available. Several of these tasks have matching Revert scripts that restore default service startup types, registry values, and scheduled task states where reversal is supported.
+## Running and reverting
 
-## Reverting changes
+Apply shows a progress window and runs the ticked tasks in order. Most tasks start a child PowerShell 5.1 process with `-NoProfile -ExecutionPolicy Bypass -File <script> --automated`. Output appears in the console that launched the tool. When the run finishes, the selector opens again.
 
-Revert support is provided for many operations through dedicated Revert-*.ps1 scripts. These scripts attempt to restore default Windows behavior for services, scheduled tasks, registry policies, and other settings modified by the forward tasks. Reversion is not guaranteed for all actions, particularly one-way cleanup or repair operations. Users should review task descriptions in the detail panel before running revert operations.
+Revert runs `Scripts\Revert-<TaskId>.ps1` when that file exists. One-way tasks use `Scripts\Revert-GenericNoOp.ps1`, which reports that there is nothing to undo. Revert mode ticks the tasks that have a real undo. Deep RAM uses `Scripts\Revert-OptDeepRAM.ps1`, which turns the virtualisation features back on. The other optimisation tasks share `Scripts\Revert-SystemOptimisation.ps1`, and that script runs once even if several of them are ticked. Restart after power, service, device, or Deep RAM changes.
 
 ## Technical notes
 
-The tool maintains no persistent configuration between runs beyond the actual changes written to the system. Re-executing the same preset reapplies the same set of changes. The selector always initializes with a default preset that can be changed by the user or overridden by Revert mode logic.
+The tool does not store a configuration between runs. The changes that remain are the ones written to Windows. Running a preset again applies that preset's tasks again.
 
-The supporting scripts reside in the Scripts subdirectory. This directory contains both forward and revert implementations, utility executables such as DelProf2.exe, and CustomChanges.ps1 as an extension point for site-specific additions. CustomChanges.ps1 is not included in the default presets.
+Scripts live in the `Scripts` folder, including forward scripts, revert scripts, `DelProf2.exe`, and `CustomChanges.ps1`. The tool targets Windows 10 and Windows 11 only.
 
-The application targets Windows 10 and Windows 11. No compatibility is provided for earlier Windows releases. The interface assumes the presence of the Windows Forms assemblies and the PowerShell cmdlets for scheduled tasks and firewall management.
+## Licence
 
-## License
-
-This repository is licensed under the GPL-3.0 License as provided in the LICENSE file included with the project. 
+This project is licensed under GPL-3.0. The licence text is in the `LICENSE` file.
 
 ## Credits
 
-PowerShell documentation is available at https://learn.microsoft.com/powershell/. DelProf2 is provided by Helge Klein at https://helgeklein.com/free-tools/delprof2-user-profile-deletion-tool/.
+PowerShell documentation is at https://learn.microsoft.com/powershell/. DelProf2 is provided by Helge Klein at https://helgeklein.com/free-tools/delprof2-user-profile-deletion-tool/.

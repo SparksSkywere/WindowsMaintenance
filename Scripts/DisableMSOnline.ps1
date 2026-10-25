@@ -46,75 +46,150 @@ function Disable-MicrosoftAccountPolicies {
     } 'Microsoft account policy blocks (NoConnectedUser + PolicyManager)'
 }
 
-function Disable-AccountNagsAndBackupPrompts {
-    Invoke-MSOnlineStep {
-        # Disable "Let's finish setting up your device" / Scoobe engagement (reduces initial and ongoing MS account pressure)
-        $engagementPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement'
-        if (-not (Test-Path $engagementPath)) { New-Item -Path $engagementPath -Force | Out-Null }
-        Set-ItemProperty -Path $engagementPath -Name 'ScoobeSystemSettingEnabled' -Value 0 -Force
-
-        # Suppress account-related notifications and badges in Start and Settings (directly targets "account" nags/badging)
-        # This affects "Show account-related notifications" surface used for backup and sign-in reminders
-        $advExplorerPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
-        if (-not (Test-Path $advExplorerPath)) { New-Item -Path $advExplorerPath -Force | Out-Null }
-        # Common community-mapped value for account notification visibility (0 = hide)
-        Set-ItemProperty -Path $advExplorerPath -Name 'Start_AccountNotifications' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
-
-        # Also ensure no MS account sign-in badging in Start (complements the above)
-        Set-ItemProperty -Path $advExplorerPath -Name 'Start_TrackDocs' -Value 0 -Force -ErrorAction SilentlyContinue
-
-        # Disable Windows consumer features / backup and "get more out of your device" style nags
-        $cloudMachine = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent'
-        if (-not (Test-Path $cloudMachine)) { New-Item -Path $cloudMachine -Force | Out-Null }
-        Set-ItemProperty -Path $cloudMachine -Name 'DisableWindowsConsumerFeatures' -Value 1 -Force
-
-        $cloudUser = 'HKCU:\SOFTWARE\Policies\Microsoft\Windows\CloudContent'
-        if (-not (Test-Path $cloudUser)) { New-Item -Path $cloudUser -Force | Out-Null }
-        Set-ItemProperty -Path $cloudUser -Name 'DisableTailoredExperiencesWithDiagnosticData' -Value 1 -Force
-
-        # Extra Content Delivery for "backup / account / offer" surfaces
-        $cdmPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'
-        if (-not (Test-Path $cdmPath)) { New-Item -Path $cdmPath -Force | Out-Null }
-        # These cover lockscreen, suggestions, offers, and account/backup style promotions
-        $cdmValues = @(
-            'RotatingLockScreenEnabled',
-            'RotatingLockScreenOverlayEnabled',
-            'SubscribedContent-338387Enabled',
-            'SubscribedContent-338388Enabled',
-            'SubscribedContent-338389Enabled',
-            'SubscribedContent-338393Enabled',
-            'SubscribedContent-353694Enabled',
-            'SubscribedContent-353696Enabled',
-            'SubscribedContent-353698Enabled',
-            'SoftLandingEnabled',
-            'SystemPaneSuggestionsEnabled',
-            'SubscribedContent-310091Enabled',
-            'SubscribedContent-314563Enabled'
-        )
-        foreach ($name in $cdmValues) {
-            Set-ItemProperty -Path $cdmPath -Name $name -Value 0 -Force -ErrorAction SilentlyContinue
-        }
-
-        # Disable Windows Backup promotion reminders where surfaced in Accounts/Settings
-        # (These do not block actual backup if user enables OneDrive/Windows Backup later)
-        $backupReminder = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\SettingSync'
-        if (-not (Test-Path $backupReminder)) { New-Item -Path $backupReminder -Force | Out-Null }
-        Set-ItemProperty -Path $backupReminder -Name 'BackupReminder' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
-
-        # Additional notification suppression for suggested / tips that often carry MS account upsell
-        $notifSettings = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings'
-        if (Test-Path $notifSettings) {
-            # Suppress Windows suggested toasts that promote account features
-            $suggestedPaths = @(
-                "$notifSettings\Windows.SystemToast.Suggested",
-                "$notifSettings\Windows.SystemToast.Account"
-            )
-            foreach ($p in $suggestedPaths) {
-                if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
-                Set-ItemProperty -Path $p -Name 'Enabled' -Value 0 -Force -ErrorAction SilentlyContinue
+function Get-TargetUserHives {
+    $hives = @('HKCU:')
+    try {
+        foreach ($key in (Get-ChildItem -Path 'Registry::HKEY_USERS' -ErrorAction Stop)) {
+            if ($key.PSChildName -match '^S-1-5-21-\d+(-\d+){3}$') {
+                $hives += "Registry::HKEY_USERS\$($key.PSChildName)"
             }
         }
-    } 'Account nags, backup prompts, "It''s all here", and notification badging'
+    } catch {
+        Write-MSOnlineStatus "Loaded user hives could not be enumerated: $($_.Exception.Message)"
+    }
+    return $hives
+}
+
+function Set-ReminderDword {
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$SubPath,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][int]$Value
+    )
+
+    $full = if ($Root -eq 'HKCU:') { "HKCU:\$SubPath" } else { "$Root\$SubPath" }
+    if (-not (Test-Path -LiteralPath $full)) {
+        New-Item -Path $full -Force | Out-Null
+    }
+    Set-ItemProperty -LiteralPath $full -Name $Name -Value $Value -Type DWord -Force
+}
+
+function Update-ReminderSettingsForHive {
+    param([Parameter(Mandatory)][string]$Root)
+
+    # Full-screen "finish setting up" / Microsoft 365 renewal (SCOOBE)
+    Set-ReminderDword -Root $Root -SubPath 'Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement' -Name 'ScoobeSystemSettingEnabled' -Value 0
+
+    # Official 24H2+ policy: Start-menu account tile reminders for backup, Microsoft 365, storage, and Xbox
+    Set-ReminderDword -Root $Root -SubPath 'SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\AccountNotifications' -Name 'DisableAccountNotifications' -Value 1
+
+    # Settings toggle "Show account-related notifications"
+    Set-ReminderDword -Root $Root -SubPath 'Software\Microsoft\Windows\CurrentVersion\SystemSettings\AccountNotifications' -Name 'EnableAccountNotifications' -Value 0
+    Set-ReminderDword -Root $Root -SubPath 'Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'Start_AccountNotifications' -Value 0
+
+    Set-ReminderDword -Root $Root -SubPath 'SOFTWARE\Policies\Microsoft\Windows\CloudContent' -Name 'DisableTailoredExperiencesWithDiagnosticData' -Value 1
+    Set-ReminderDword -Root $Root -SubPath 'SOFTWARE\Policies\Microsoft\Windows\CloudContent' -Name 'DisableSoftLanding' -Value 1
+
+    $cdmValues = @(
+        'ContentDeliveryAllowed',
+        'RotatingLockScreenEnabled',
+        'RotatingLockScreenOverlayEnabled',
+        'SubscribedContent-310093Enabled',
+        'SubscribedContent-338387Enabled',
+        'SubscribedContent-338388Enabled',
+        'SubscribedContent-338389Enabled',
+        'SubscribedContent-338393Enabled',
+        'SubscribedContent-353694Enabled',
+        'SubscribedContent-353696Enabled',
+        'SubscribedContent-353698Enabled',
+        'SubscribedContent-88000326Enabled',
+        'SoftLandingEnabled',
+        'SystemPaneSuggestionsEnabled',
+        'SubscribedContent-310091Enabled',
+        'SubscribedContent-314563Enabled'
+    )
+    foreach ($name in $cdmValues) {
+        Set-ReminderDword -Root $Root -SubPath 'Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' -Name $name -Value 0
+    }
+
+    # Does not turn backup itself off. Hides the promotion reminder.
+    Set-ReminderDword -Root $Root -SubPath 'Software\Microsoft\Windows\CurrentVersion\SettingSync' -Name 'BackupReminder' -Value 0
+
+    $toastNames = @(
+        'Windows.SystemToast.BackupReminder',
+        'Windows.SystemToast.Suggested',
+        'Windows.SystemToast.Account'
+    )
+    foreach ($toastName in $toastNames) {
+        Set-ReminderDword -Root $Root -SubPath "Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\$toastName" -Name 'Enabled' -Value 0
+    }
+
+    $notifSub = 'Software\Microsoft\Windows\CurrentVersion\Notifications\Settings'
+    $notifFull = if ($Root -eq 'HKCU:') { "HKCU:\$notifSub" } else { "$Root\$notifSub" }
+    if (Test-Path -LiteralPath $notifFull) {
+        $pattern = 'BackupReminder|WindowsBackup|MicrosoftOfficeHub|OfficeHub|Microsoft365|OutlookForWindows|CloudExperienceHost|SystemToast\.Suggested|SystemToast\.Account|ActionsServer'
+        Get-ChildItem -LiteralPath $notifFull -ErrorAction SilentlyContinue | Where-Object {
+            $_.PSChildName -match $pattern
+        } | ForEach-Object {
+            Set-ItemProperty -LiteralPath $_.PSPath -Name 'Enabled' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Invoke-DefaultUserHive {
+    param([Parameter(Mandatory)][scriptblock]$Action)
+
+    $dat = Join-Path $env:SystemDrive 'Users\Default\NTUSER.DAT'
+    if (-not (Test-Path -LiteralPath $dat)) { return }
+
+    $mountName = 'WMDefaultUser'
+    $loaded = $false
+    try {
+        & reg.exe unload "HKU\$mountName" 2>$null | Out-Null
+        & reg.exe load "HKU\$mountName" $dat | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            $loaded = $true
+            & $Action "Registry::HKEY_USERS\$mountName"
+        } else {
+            Write-MSOnlineStatus 'Default user hive was not loaded. Signed-in users were still updated.'
+        }
+    } catch {
+        Write-MSOnlineStatus "Default user hive skipped: $($_.Exception.Message)"
+    } finally {
+        if ($loaded) {
+            [gc]::Collect()
+            [gc]::WaitForPendingFinalizers()
+            & reg.exe unload "HKU\$mountName" | Out-Null
+        }
+    }
+}
+
+function Disable-AccountNagsAndBackupPrompts {
+    Invoke-MSOnlineStep {
+        foreach ($hive in (Get-TargetUserHives)) {
+            Update-ReminderSettingsForHive -Root $hive
+        }
+
+        Invoke-DefaultUserHive -Action {
+            param($root)
+            Update-ReminderSettingsForHive -Root $root
+        }
+
+        $cloudMachine = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent'
+        if (-not (Test-Path $cloudMachine)) { New-Item -Path $cloudMachine -Force | Out-Null }
+        Set-ItemProperty -Path $cloudMachine -Name 'DisableWindowsConsumerFeatures' -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $cloudMachine -Name 'DisableSoftLanding' -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $cloudMachine -Name 'DisableCloudOptimizedContent' -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $cloudMachine -Name 'DisableConsumerAccountStateContent' -Value 1 -Type DWord -Force
+
+        # Documented switch for "configure Windows Backup" monitoring reminders. Backup can still be turned on later.
+        $windowsBackup = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsBackup'
+        if (-not (Test-Path $windowsBackup)) { New-Item -Path $windowsBackup -Force | Out-Null }
+        Set-ItemProperty -Path $windowsBackup -Name 'DisableMonitoring' -Value 1 -Type DWord -Force
+
+        Write-MSOnlineStatus 'Backup, Microsoft 365, and account reminders are suppressed for loaded users and the default profile. Sign out for Start and Settings to refresh. An existing backup toast can linger until the next morning.'
+    } 'Account, Windows Backup, and Microsoft 365 reminders'
 }
 
 function Invoke-DisableMSOnline {
@@ -133,7 +208,7 @@ try {
     if (-not $AutomatedMode) {
         Add-Type -AssemblyName System.Windows.Forms
         [System.Windows.Forms.MessageBox]::Show(
-            'Microsoft account prompts and online nags have been disabled for local accounts (backup reminders, "It''s all here with a Microsoft account", sign-in tabs, account badges, and many suggestion surfaces).`n`nRestart or sign out/in for full effect in Settings and Start menu.',
+            'Backup, Microsoft 365, and Microsoft account reminders are now suppressed with the Start account-notification policy, Windows Backup monitoring, and the backup/365 toast channels.`n`nThis does not turn off backup or a subscription you already use. Sign out or restart. A toast that is already on screen can remain until the next morning.',
             'Disable MS Online / Account Prompts',
             'OK',
             'Information'

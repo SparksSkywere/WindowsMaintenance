@@ -17,7 +17,7 @@ param (
     )
 
 #Applications in a list using package names, feel free to add custom names
-$OptimizedAppPackagePatterns = @(
+$OptimisedAppPackagePatterns = @(
     "Microsoft.BingFinance"
     "Microsoft.BingNews"
     "Microsoft.BingSearch"
@@ -77,7 +77,7 @@ function Remove-AppPackagesByPattern {
     }
 }
 
-foreach ($appPattern in $OptimizedAppPackagePatterns) {
+foreach ($appPattern in $OptimisedAppPackagePatterns) {
     Remove-AppPackagesByPattern -Pattern $appPattern
 }
 
@@ -102,7 +102,7 @@ Function DisService {
             'OneSyncSvc',                   # Sync Host (can break mail sync if used)
             'CDPSvc',                       # Connected Devices Platform Service
             'CDPUserSvc',                   # Connected Devices Platform User Service
-            'DoSvc',                        # Delivery Optimization
+            'DoSvc',                        # Delivery Optimisation
             'XblAuthManager',               # Xbox Live Auth Manager
             'XblGameSave',                  # Xbox Live Game Save Service
             'XboxNetApiSvc',                # Xbox Live Networking Service

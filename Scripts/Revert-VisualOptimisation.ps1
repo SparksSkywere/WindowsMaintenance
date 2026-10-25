@@ -2,7 +2,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # Revert for VisualOptimisation.ps1
-# Re-enables common visual effects, animations, and DWM behaviors that were disabled for performance.
+# Re-enables common visual effects, animations, and DWM behaviours that were disabled for performance.
 
 $AutomatedMode = $args -contains '--automated'
 
@@ -11,12 +11,12 @@ function Write-Status { param([string]$m) Write-Host $m }
 try {
     Write-Status 'Reverting visual optimisations (re-enabling animations and effects)...'
 
-    # VisualFXSetting back toward "Let Windows choose" (default is usually 0 or 1 in many profiles)
+    # VisualFXSetting back towards "Let Windows choose" (default is usually 0 or 1 in many profiles)
     try {
         Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects' -Name 'VisualFXSetting' -Value 0 -Force -EA SilentlyContinue
     } catch {}
 
-    # MinAnimate (window minimize animation)
+    # MinAnimate (window minimise animation)
     $wm = 'HKCU:\Control Panel\Desktop\WindowMetrics'
     if (Test-Path $wm) {
         try { Set-ItemProperty -Path $wm -Name 'MinAnimate' -Value 1 -Force -EA SilentlyContinue } catch {}

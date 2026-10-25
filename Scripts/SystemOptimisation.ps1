@@ -1,40 +1,50 @@
 # Check if called from main script (automated mode)
 $AutomatedMode = $args -contains "--automated"
-$DisableAIMode = $args -contains "--disable-ai"
-$OptimizationProfile = "optimal"
+$OptimisationProfile = "optimal"
+$OptimisationAction = ""
 
 for ($argIndex = 0; $argIndex -lt $args.Count; $argIndex++) {
     $argValue = [string]$args[$argIndex]
 
     if ($argValue -eq "--profile" -and ($argIndex + 1) -lt $args.Count) {
-        $OptimizationProfile = [string]$args[$argIndex + 1]
+        $OptimisationProfile = [string]$args[$argIndex + 1]
         $argIndex++
         continue
     }
 
     if ($argValue -like "--profile=*") {
-        $OptimizationProfile = $argValue.Substring(10)
+        $OptimisationProfile = $argValue.Substring(10)
+        continue
+    }
+
+    if ($argValue -eq "--action" -and ($argIndex + 1) -lt $args.Count) {
+        $OptimisationAction = [string]$args[$argIndex + 1]
+        $argIndex++
+        continue
+    }
+
+    if ($argValue -like "--action=*") {
+        $OptimisationAction = $argValue.Substring(9)
     }
 }
 
-if ([string]::IsNullOrWhiteSpace($OptimizationProfile)) {
-    $OptimizationProfile = "optimal"
+if ([string]::IsNullOrWhiteSpace($OptimisationProfile)) {
+    $OptimisationProfile = "optimal"
 } else {
-    $OptimizationProfile = $OptimizationProfile.ToLowerInvariant()
+    $OptimisationProfile = $OptimisationProfile.ToLowerInvariant()
 }
 
-if ($OptimizationProfile -notin @("minimal", "optimal", "aggressive")) {
-    $OptimizationProfile = "optimal"
+if ($OptimisationProfile -notin @("minimal", "optimal", "aggressive")) {
+    $OptimisationProfile = "optimal"
 }
 
 $VisualOptimisationScript = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "VisualOptimisation.ps1"
-$WindowsPrivacyScript = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "WindowsPrivacy.ps1"
 
 # Progress reporting functions for integration with main script
 function Show-Progress {
     param([string]$Status, [int]$Percent = -1)
     
-    # When showing the optimization form, don't show progress dialog - just write to console
+    # When showing the optimisation form, don't show progress dialogue - just write to console
     Write-Host $Status -ForegroundColor Cyan
 }
 
@@ -67,7 +77,7 @@ function Enable-DoubleBuffering {
 
 function ExecutionCompleted {
     if ($Global:MainProgressForm) {
-        Show-Progress "System optimization completed successfully!" 100
+        Show-Progress "System optimisation completed successfully!" 100
         Start-Sleep -Seconds 2
     }
 }
@@ -103,7 +113,7 @@ function Safe-Execute {
     }
 }
 
-# Telemetry and background services optimization functions - Modern Windows 10/11
+# Telemetry and background services optimisation functions - Modern Windows 10/11
 function DisableDiagtrack {
     Safe-Execute { 
         $diagService = Get-Service -Name "DiagTrack" -ErrorAction SilentlyContinue
@@ -276,58 +286,164 @@ function DisableBackgroundAppsPerApp {
     } "DisableBackgroundAppsPerApp"
 }
 
-# Add new optimization functions for Windows 10/11
-function Optimize-PowerSettings {
-    Safe-Execute {
-        # Check if High Performance power scheme exists
-        $highPerfGuid = "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"
-        $schemes = powercfg -list 2>$null
-        
-        if ($schemes -match $highPerfGuid) {
-            # High Performance scheme exists, set it active
-            powercfg -setactive $highPerfGuid 2>$null
-            Write-Host "  Set power scheme to High Performance" -ForegroundColor Green
-        } else {
-            # High Performance scheme doesn't exist, try to create it
-            try {
-                powercfg -duplicatescheme $highPerfGuid 2>$null
-                if ($LASTEXITCODE -eq 0) {
-                    powercfg -setactive $highPerfGuid 2>$null
-                    Write-Host "  Created and set High Performance power scheme" -ForegroundColor Green
-                } else {
-                    Write-Host "  Could not create High Performance scheme, using current scheme" -ForegroundColor Yellow
-                }
-            } catch {
-                Write-Host "  High Performance scheme not available, using current scheme" -ForegroundColor Yellow
-            }
-        }
-        
-        # Configure power settings regardless of scheme
-        try {
-            # Disable USB selective suspend
-            powercfg -setacvalueindex SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0 2>$null
-            powercfg -setdcvalueindex SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0 2>$null
-            
-            # Disable link state power management
-            powercfg -setacvalueindex SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 ee12f906-d277-404b-b6da-e5fa1a576df5 0 2>$null
-            powercfg -setdcvalueindex SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 ee12f906-d277-404b-b6da-e5fa1a576df5 0 2>$null
-            
-            powercfg -setactive SCHEME_CURRENT 2>$null
-            Write-Host "  Configured power settings for performance" -ForegroundColor Green
-        } catch {
-            Write-Host "  Could not configure advanced power settings" -ForegroundColor Yellow
-        }
-    } "Optimize-PowerSettings"
+# Add new optimisation functions for Windows 10/11
+function Set-CurrentSchemeValue {
+    param(
+        [Parameter(Mandatory)][string]$Subgroup,
+        [Parameter(Mandatory)][string]$Setting,
+        [Parameter(Mandatory)][int]$Value
+    )
+
+    powercfg -setacvalueindex SCHEME_CURRENT $Subgroup $Setting $Value 2>$null | Out-Null
+    powercfg -setdcvalueindex SCHEME_CURRENT $Subgroup $Setting $Value 2>$null | Out-Null
 }
 
-function Optimize-NetworkSettings {
+function Disable-AttachedDevicePowerSaving {
+    # Uncheck "Allow the computer to turn off this device to save power" for attached
+    # network, USB, Bluetooth, audio, HID, mouse, and keyboard devices.
+    $classIds = @(
+        '{4d36e972-e325-11ce-bfc1-08002be10318}', # Network adapters
+        '{36fc9e60-c465-11cf-8056-444553540000}', # USB
+        '{88bae032-5a81-49f0-bc3d-a4ff138216d6}', # USB devices
+        '{e0cbf06c-cd8b-4647-bb8a-263b43f0f974}', # Bluetooth
+        '{4d36e96c-e325-11ce-bfc1-08002be10318}', # Sound and media
+        '{745a17a0-74d3-11d0-b6fe-00a0c90f57da}', # HID
+        '{4d36e96f-e325-11ce-bfc1-08002be10318}', # Mice
+        '{4d36e96b-e325-11ce-bfc1-08002be10318}'  # Keyboards
+    )
+
+    $updated = 0
+    foreach ($classId in $classIds) {
+        $classPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Class\$classId"
+        if (-not (Test-Path -LiteralPath $classPath)) { continue }
+        $instances = @(Get-ChildItem -LiteralPath $classPath -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match '^\d{4}$' })
+        foreach ($instance in $instances) {
+            if (-not $instance) { continue }
+            Set-ItemProperty -LiteralPath $instance.PSPath -Name 'PnPCapabilities' -Value 24 -Type DWord -Force -ErrorAction SilentlyContinue
+            $updated++
+        }
+    }
+    Write-Host "  Device power saving disabled for $updated attached-device entries." -ForegroundColor Green
+
+    $wmiChanged = 0
+    try {
+        $powerDevices = @(Get-CimInstance -Namespace 'root\wmi' -ClassName 'MSPower_DeviceEnable' -ErrorAction Stop)
+        foreach ($powerDevice in $powerDevices) {
+            try {
+                if (-not $powerDevice.Enable) { continue }
+                Set-CimInstance -InputObject $powerDevice -Property @{ Enable = $false } -ErrorAction Stop | Out-Null
+                $wmiChanged++
+            } catch {
+                # Some firmware devices reject the write. The registry change above still covers the class.
+            }
+        }
+        Write-Host "  Cleared device sleep on $wmiChanged power-managed devices." -ForegroundColor Green
+    } catch {
+        Write-Host "  Device power list was not available: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+}
+
+function Enable-AttachedDevicePowerSaving {
+    $classIds = @(
+        '{4d36e972-e325-11ce-bfc1-08002be10318}',
+        '{36fc9e60-c465-11cf-8056-444553540000}',
+        '{88bae032-5a81-49f0-bc3d-a4ff138216d6}',
+        '{e0cbf06c-cd8b-4647-bb8a-263b43f0f974}',
+        '{4d36e96c-e325-11ce-bfc1-08002be10318}',
+        '{745a17a0-74d3-11d0-b6fe-00a0c90f57da}',
+        '{4d36e96f-e325-11ce-bfc1-08002be10318}',
+        '{4d36e96b-e325-11ce-bfc1-08002be10318}'
+    )
+
+    foreach ($classId in $classIds) {
+        $classPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Class\$classId"
+        if (-not (Test-Path -LiteralPath $classPath)) { continue }
+        Get-ChildItem -LiteralPath $classPath -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match '^\d{4}$' } | ForEach-Object {
+            Remove-ItemProperty -LiteralPath $_.PSPath -Name 'PnPCapabilities' -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    try {
+        $powerDevices = @(Get-CimInstance -Namespace 'root\wmi' -ClassName 'MSPower_DeviceEnable' -ErrorAction Stop)
+        foreach ($powerDevice in $powerDevices) {
+            try {
+                Set-CimInstance -InputObject $powerDevice -Property @{ Enable = $true } -ErrorAction Stop | Out-Null
+            } catch {}
+        }
+    } catch {}
+}
+
+function Optimise-PowerSettings {
+    Safe-Execute {
+        $ultimateGuid = 'e9a42b02-d5df-448d-aa00-03f14749eb61'
+        $highPerfGuid = '8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c'
+        $schemes = (powercfg -list 2>$null | Out-String)
+
+        if ($schemes -notmatch $ultimateGuid) {
+            $null = powercfg -duplicatescheme $ultimateGuid 2>&1
+            $schemes = (powercfg -list 2>$null | Out-String)
+        }
+
+        if ($schemes -match $ultimateGuid) {
+            powercfg -setactive $ultimateGuid 2>$null | Out-Null
+            Write-Host "  Active power scheme: Ultimate Performance" -ForegroundColor Green
+        } elseif ($schemes -match $highPerfGuid) {
+            powercfg -setactive $highPerfGuid 2>$null | Out-Null
+            Write-Host "  Active power scheme: High Performance" -ForegroundColor Green
+        } else {
+            $null = powercfg -duplicatescheme $highPerfGuid 2>&1
+            powercfg -setactive $highPerfGuid 2>$null | Out-Null
+            Write-Host "  Active power scheme: High Performance" -ForegroundColor Green
+        }
+
+        # USB selective suspend and USB 3 link power management off.
+        Set-CurrentSchemeValue -Subgroup '2a737441-1930-4402-8d77-b2bebba308a3' -Setting '48e6b7a6-50f5-4782-a5d4-53bb8f07e226' -Value 0
+        Set-CurrentSchemeValue -Subgroup '2a737441-1930-4402-8d77-b2bebba308a3' -Setting 'd4e98f31-5ffe-4ce1-be31-1b38b384c009' -Value 0
+
+        # PCI Express link-state power management off. This belongs to the PCI Express group, not USB.
+        Set-CurrentSchemeValue -Subgroup '501a4d13-42af-4429-9fd1-a8218c268e20' -Setting 'ee12f906-d277-404b-b6da-e5fa1a576df5' -Value 0
+
+        # Never spin disks down while the scheme is active.
+        Set-CurrentSchemeValue -Subgroup '0012ee47-9041-4b5d-9b77-535fba8b1442' -Setting '6738e2c4-e8a5-4a42-b16a-e040e769756e' -Value 0
+
+        # Processor stays at full range, cores stay unparked, boost stays aggressive.
+        Set-CurrentSchemeValue -Subgroup '54533251-82be-4824-96c1-47b60b740d00' -Setting '893dee8e-2bef-41e0-89c6-b55d0929964c' -Value 100
+        Set-CurrentSchemeValue -Subgroup '54533251-82be-4824-96c1-47b60b740d00' -Setting 'bc5038f7-23e0-4960-96da-33abaf5935ec' -Value 100
+        Set-CurrentSchemeValue -Subgroup '54533251-82be-4824-96c1-47b60b740d00' -Setting '0cc5b647-c1df-4637-891a-dec35c318583' -Value 100
+        Set-CurrentSchemeValue -Subgroup '54533251-82be-4824-96c1-47b60b740d00' -Setting '94d3a615-a899-4ac5-ae2b-e4d8f634367f' -Value 1
+        Set-CurrentSchemeValue -Subgroup '54533251-82be-4824-96c1-47b60b740d00' -Setting 'be337238-0d82-4146-a960-4f3749d470c7' -Value 2
+        Set-CurrentSchemeValue -Subgroup '54533251-82be-4824-96c1-47b60b740d00' -Setting '45bcc044-d885-43e2-8605-ee0ec6e96b59' -Value 100
+        Set-CurrentSchemeValue -Subgroup '54533251-82be-4824-96c1-47b60b740d00' -Setting '36687f9e-e3a5-4dbf-b1dc-15eb381c6863' -Value 0
+
+        # Do not let idle sleep park the machine. The display timeout is left as the user set it.
+        Set-CurrentSchemeValue -Subgroup '238c9fa8-0aad-41ed-83f4-97be242c8f20' -Setting '29f6c1db-86da-48c5-9fdb-f2b67b1f44da' -Value 0
+        Set-CurrentSchemeValue -Subgroup '238c9fa8-0aad-41ed-83f4-97be242c8f20' -Setting '9d7815a6-7ee4-497e-8888-515a05f02364' -Value 0
+        Set-CurrentSchemeValue -Subgroup '238c9fa8-0aad-41ed-83f4-97be242c8f20' -Setting '94ac6d29-73ce-41a6-809f-6363ba21b47e' -Value 0
+
+        # Wireless adapter power saving off.
+        Set-CurrentSchemeValue -Subgroup '19cbb8fa-5279-450e-9fac-8a3d5fedd0c1' -Setting '12bbebe6-58d6-4636-95bb-3217ef867c1a' -Value 0
+
+        powercfg -setactive SCHEME_CURRENT 2>$null | Out-Null
+        Write-Host "  Power scheme tuned for maximum performance on mains and battery." -ForegroundColor Green
+        Write-Host "  Laptops will use more battery. Sleep can still be started from the Start menu." -ForegroundColor Yellow
+
+        Disable-AttachedDevicePowerSaving
+
+        $throttlePath = 'HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling'
+        if (-not (Test-Path $throttlePath)) { New-Item -Path $throttlePath -Force | Out-Null }
+        Set-ItemProperty -Path $throttlePath -Name 'PowerThrottlingOff' -Value 1 -Type DWord -Force
+        Write-Host "  Windows power throttling disabled so background work is not capped." -ForegroundColor Green
+    } "Optimise-PowerSettings"
+}
+
+function Optimise-NetworkSettings {
     Safe-Execute {
         # Disable network throttling for multimedia/games
         $regPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile"
         if (-not (Test-Path $regPath)) { New-Item -Path $regPath -Force | Out-Null }
         Set-ItemProperty -Path $regPath -Name "NetworkThrottlingIndex" -Value 0xffffffff -Force
 
-        # TCP optimizations
+        # TCP optimisations
         netsh int tcp set global autotuninglevel=normal 2>$null | Out-Null
         netsh int tcp set global chimney=enabled 2>$null | Out-Null
         netsh int tcp set global rss=enabled 2>$null | Out-Null
@@ -363,33 +479,152 @@ function Optimize-NetworkSettings {
         # Enable TCP timestamps for better RTT calculation (improves throughput on busy networks)
         netsh int tcp set global timestamps=enabled 2>$null | Out-Null
 
-        # Disable network adapter power management (prevent NIC from sleeping)
-        Get-NetAdapter | Where-Object { $_.Status -eq "Up" } | ForEach-Object {
-            $adapterPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4D36E972-E325-11CE-BFC1-08002BE10318}"
-            Get-ChildItem $adapterPath -ErrorAction SilentlyContinue | ForEach-Object {
-                $pnpId = (Get-ItemProperty $_.PSPath -Name "NetCfgInstanceId" -ErrorAction SilentlyContinue).NetCfgInstanceId
-                if ($pnpId -eq $_.Name -or $null -ne $pnpId) {
-                    Set-ItemProperty -Path $_.PSPath -Name "PnPCapabilities" -Value 24 -Type DWord -Force -ErrorAction SilentlyContinue
-                }
+    } "Optimise-NetworkSettings"
+}
+
+function Optimise-MemoryManagement {
+    Safe-Execute {
+        $regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management"
+
+        # LargeSystemCache is a file-server setting. On a desktop it holds file data in RAM
+        # and pushes programs out. Keep the cache working for programs instead.
+        Set-ItemProperty -Path $regPath -Name "LargeSystemCache" -Value 0 -Type DWord -Force
+        Set-ItemProperty -Path $regPath -Name "ClearPageFileAtShutdown" -Value 0 -Type DWord -Force
+
+        $totalKb = 0
+        try {
+            $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+            $totalKb = [int64]$os.TotalVisibleMemorySize
+        } catch {}
+
+        # Keep the kernel resident only when the machine has 16 GB or more.
+        $pinKernel = 0
+        $sixteenGbInKb = 16 * 1024 * 1024
+        if ($totalKb -ge $sixteenGbInKb) { $pinKernel = 1 }
+        Set-ItemProperty -Path $regPath -Name "DisablePagingExecutive" -Value $pinKernel -Type DWord -Force
+
+        $totalGb = [math]::Round($totalKb / 1MB, 1)
+        Write-Host "  Desktop memory policy applied ($totalGb GB installed)." -ForegroundColor Green
+    } "Optimise-MemoryManagement"
+}
+
+function Test-SystemDiskSolidState {
+    try {
+        $drive = [string]$env:SystemDrive
+        if ([string]::IsNullOrWhiteSpace($drive)) { return $false }
+        $letter = $drive.TrimEnd('\').TrimEnd(':')
+        if ($letter.Length -ne 1) { return $false }
+        $partition = Get-Partition -DriveLetter $letter -ErrorAction Stop | Select-Object -First 1
+        if (-not $partition) { return $false }
+        $disk = Get-Disk -Number $partition.DiskNumber -ErrorAction Stop
+        $media = [string]$disk.MediaType
+        $bus = [string]$disk.BusType
+        if ($media -eq 'SSD' -or $media -eq 'SCM' -or $bus -eq 'NVMe') { return $true }
+    } catch {}
+    return $false
+}
+
+function Optimise-RuntimeFootprint {
+    Safe-Execute {
+        try {
+            $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+            $totalKb = [double]$os.TotalVisibleMemorySize
+            $freeKb = [double]$os.FreePhysicalMemory
+            $usedPct = 0
+            if ($totalKb -gt 0) { $usedPct = [math]::Round((($totalKb - $freeKb) / $totalKb) * 100, 0) }
+            $usedGb = [math]::Round(($totalKb - $freeKb) / 1MB, 1)
+            $totalGb = [math]::Round($totalKb / 1MB, 1)
+            Write-Host "  Memory in use now: $usedGb GB of $totalGb GB ($usedPct%)." -ForegroundColor Cyan
+            Write-Host "  Largest processes:" -ForegroundColor Cyan
+            Get-Process | Sort-Object WorkingSet64 -Descending | Select-Object -First 8 | ForEach-Object {
+                $mb = [math]::Round($_.WorkingSet64 / 1MB, 0)
+                Write-Host ("    {0,-28} {1,5} MB" -f $_.ProcessName, $mb)
+            }
+        } catch {
+            Write-Host "  Could not read the current memory snapshot." -ForegroundColor Yellow
+        }
+
+        # Reserve less CPU for background multimedia so the foreground stays responsive.
+        $profilePath = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile'
+        if (-not (Test-Path $profilePath)) { New-Item -Path $profilePath -Force | Out-Null }
+        Set-ItemProperty -Path $profilePath -Name 'SystemResponsiveness' -Value 10 -Type DWord -Force
+        Set-ItemProperty -Path $profilePath -Name 'NetworkThrottlingIndex' -Value 0xffffffff -Type DWord -Force
+
+        $gamesPath = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games'
+        if (-not (Test-Path $gamesPath)) { New-Item -Path $gamesPath -Force | Out-Null }
+        Set-ItemProperty -Path $gamesPath -Name 'GPU Priority' -Value 8 -Type DWord -Force
+        Set-ItemProperty -Path $gamesPath -Name 'Priority' -Value 6 -Type DWord -Force
+        Set-ItemProperty -Path $gamesPath -Name 'Scheduling Category' -Value 'High' -Type String -Force
+        Set-ItemProperty -Path $gamesPath -Name 'SFIO Priority' -Value 'High' -Type String -Force
+
+        Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl' -Name 'Win32PrioritySeparation' -Value 38 -Type DWord -Force
+        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'MenuShowDelay' -Value '0' -Type String -Force
+
+        # Game DVR records in the background and holds memory. Game Mode stays on.
+        $gameBarPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR'
+        if (-not (Test-Path $gameBarPath)) { New-Item -Path $gameBarPath -Force | Out-Null }
+        Set-ItemProperty -Path $gameBarPath -Name 'AppCaptureEnabled' -Value 0 -Type DWord -Force
+        $gameBarPolicy = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR'
+        if (-not (Test-Path $gameBarPolicy)) { New-Item -Path $gameBarPolicy -Force | Out-Null }
+        Set-ItemProperty -Path $gameBarPolicy -Name 'AllowGameDVR' -Value 0 -Type DWord -Force
+        $gameBarUser = 'HKCU:\Software\Microsoft\GameBar'
+        if (-not (Test-Path $gameBarUser)) { New-Item -Path $gameBarUser -Force | Out-Null }
+        Set-ItemProperty -Path $gameBarUser -Name 'AutoGameModeEnabled' -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers' -Name 'HwSchMode' -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
+
+        # Edge startup boost and background mode are a common idle-RAM cost. Browsing still works.
+        foreach ($edgePolicy in @(
+            'HKLM:\SOFTWARE\Policies\Microsoft\Edge',
+            'HKCU:\SOFTWARE\Policies\Microsoft\Edge'
+        )) {
+            if (-not (Test-Path $edgePolicy)) { New-Item -Path $edgePolicy -Force | Out-Null }
+            Set-ItemProperty -Path $edgePolicy -Name 'StartupBoostEnabled' -Value 0 -Type DWord -Force
+            Set-ItemProperty -Path $edgePolicy -Name 'BackgroundModeEnabled' -Value 0 -Type DWord -Force
+            Set-ItemProperty -Path $edgePolicy -Name 'SleepingTabsEnabled' -Value 1 -Type DWord -Force
+        }
+
+        # Store and inbox apps stop running while they are closed. Settings, Start, and Explorer still open normally.
+        DisableBackgroundApps
+        DisableBackgroundAppsPerApp
+
+        # Widgets and the feed board stay resident after they are closed. The shell still opens normally.
+        Disable-WindowsWidgets
+
+        # Windows holds startup programs for about 10 seconds. Remove that wait.
+        $startupDelayPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize'
+        if (-not (Test-Path $startupDelayPath)) { New-Item -Path $startupDelayPath -Force | Out-Null }
+        Set-ItemProperty -Path $startupDelayPath -Name 'StartupDelayInMSec' -Value 0 -Type DWord -Force
+
+        # NDU tracks per-app network use and can pin a service host in memory. Networking itself stays up.
+        $nduPath = 'HKLM:\SYSTEM\CurrentControlSet\Services\Ndu'
+        if (Test-Path $nduPath) {
+            Set-ItemProperty -Path $nduPath -Name 'Start' -Value 4 -Type DWord -Force
+        }
+
+        if (Test-SystemDiskSolidState) {
+            $prefetchPath = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters'
+            if (Test-Path $prefetchPath) {
+                Set-ItemProperty -Path $prefetchPath -Name 'EnablePrefetcher' -Value 0 -Type DWord -Force
+                Set-ItemProperty -Path $prefetchPath -Name 'EnableSuperfetch' -Value 0 -Type DWord -Force
+                Write-Host "  Prefetch disabled because the system disk is solid-state." -ForegroundColor Green
+            }
+            fsutil behavior set disablelastaccess 1 2>$null | Out-Null
+        } else {
+            Write-Host "  Prefetch left on because the system disk is not a detected SSD." -ForegroundColor Yellow
+        }
+
+        # Legacy peer-name services are not used for normal internet or file sharing.
+        foreach ($legacyService in @('PNRPsvc', 'p2psvc', 'p2pimsvc', 'Fax', 'RetailDemo', 'MapsBroker', 'RemoteRegistry')) {
+            $service = Get-Service -Name $legacyService -ErrorAction SilentlyContinue
+            if ($service) {
+                Stop-Service -Name $legacyService -Force -ErrorAction SilentlyContinue
+                Set-Service -Name $legacyService -StartupType Disabled -ErrorAction SilentlyContinue
             }
         }
 
-    } "Optimize-NetworkSettings"
-}
-
-function Optimize-MemoryManagement {
-    Safe-Execute {
-        # Disable paging executive
-        $regPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management"
-        Set-ItemProperty -Path $regPath -Name "DisablePagingExecutive" -Value 1 -Force
-        
-        # Large system cache
-        Set-ItemProperty -Path $regPath -Name "LargeSystemCache" -Value 1 -Force
-        
-        # Clear pagefile at shutdown (optional)
-        Set-ItemProperty -Path $regPath -Name "ClearPageFileAtShutdown" -Value 0 -Force
-        
-    } "Optimize-MemoryManagement"
+        Write-Host "  Runtime footprint applied. Restart so service and device changes finish loading." -ForegroundColor Yellow
+        Write-Host "  Idle memory stays higher than the open programs suggest. Windows compresses unused pages and keeps a standby cache so programs reopen faster. Both are released when an app needs the RAM, so this pass does not empty that cache." -ForegroundColor Yellow
+    } "Optimise-RuntimeFootprint"
 }
 
 function Disable-WindowsDefenderRealTime {
@@ -403,124 +638,7 @@ function Disable-WindowsDefenderRealTime {
     } "Disable-WindowsDefenderRealTime"
 }
 
-function Disable-WindowsAI {
-    Safe-Execute {
-        Write-Host "Disabling Windows AI features, Copilot integrations, and cloud-assisted search..." -ForegroundColor Yellow
-
-        # 1. Hide Copilot button from taskbar and remove the Win+C shortcut.
-        $explorerAdvancedPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
-        if (-not (Test-Path $explorerAdvancedPath)) { New-Item -Path $explorerAdvancedPath -Force | Out-Null }
-        Set-ItemProperty -Path $explorerAdvancedPath -Name "ShowCopilotButton" -Value 0 -Force
-        Set-ItemProperty -Path $explorerAdvancedPath -Name "DisabledHotkeys" -Value "C" -Force
-
-        # 2. Disable Copilot and cloud-assisted search settings.
-        $searchSettingsPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\SearchSettings"
-        if (-not (Test-Path $searchSettingsPath)) { New-Item -Path $searchSettingsPath -Force | Out-Null }
-        Set-ItemProperty -Path $searchSettingsPath -Name "IsCopilotEnabled" -Value 0 -Force
-        Set-ItemProperty -Path $searchSettingsPath -Name "IsCopilotAvailable" -Value 0 -Force
-        Set-ItemProperty -Path $searchSettingsPath -Name "IsDynamicSearchBoxEnabled" -Value 0 -Force -ErrorAction SilentlyContinue
-        Set-ItemProperty -Path $searchSettingsPath -Name "IsAADCloudSearchEnabled" -Value 0 -Force -ErrorAction SilentlyContinue
-        Set-ItemProperty -Path $searchSettingsPath -Name "IsMSACloudSearchEnabled" -Value 0 -Force -ErrorAction SilentlyContinue
-
-        $searchPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search"
-        if (-not (Test-Path $searchPath)) { New-Item -Path $searchPath -Force | Out-Null }
-        Set-ItemProperty -Path $searchPath -Name "BingSearchEnabled" -Value 0 -Force -ErrorAction SilentlyContinue
-        Set-ItemProperty -Path $searchPath -Name "CortanaConsent" -Value 0 -Force -ErrorAction SilentlyContinue
-        Set-ItemProperty -Path $searchPath -Name "AllowSearchToUseLocation" -Value 0 -Force -ErrorAction SilentlyContinue
-
-        # 3. Disable Copilot and AI policy switches system-wide.
-        $copilotPolicyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot"
-        if (-not (Test-Path $copilotPolicyPath)) { New-Item -Path $copilotPolicyPath -Force | Out-Null }
-        Set-ItemProperty -Path $copilotPolicyPath -Name "TurnOffWindowsCopilot" -Value 1 -Force
-
-        $copilotUserPolicyPath = "HKCU:\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot"
-        if (-not (Test-Path $copilotUserPolicyPath)) { New-Item -Path $copilotUserPolicyPath -Force | Out-Null }
-        Set-ItemProperty -Path $copilotUserPolicyPath -Name "TurnOffWindowsCopilot" -Value 1 -Force
-
-        # 4. Disable Windows AI features such as Recall and the Settings agent.
-        $windowsAIPolicyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsAI"
-        if (-not (Test-Path $windowsAIPolicyPath)) { New-Item -Path $windowsAIPolicyPath -Force | Out-Null }
-        Set-ItemProperty -Path $windowsAIPolicyPath -Name "DisableAIDataAnalysis" -Value 1 -Force
-        Set-ItemProperty -Path $windowsAIPolicyPath -Name "DisableSettingsAgent" -Value 1 -Force
-
-        $explorerPolicyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer"
-        if (-not (Test-Path $explorerPolicyPath)) { New-Item -Path $explorerPolicyPath -Force | Out-Null }
-        Set-ItemProperty -Path $explorerPolicyPath -Name "DisableSearchBoxSuggestions" -Value 1 -Force
-
-        $speechPolicyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Speech"
-        if (-not (Test-Path $speechPolicyPath)) { New-Item -Path $speechPolicyPath -Force | Out-Null }
-        Set-ItemProperty -Path $speechPolicyPath -Name "AllowOnlineSpeechRecognition" -Value 0 -Force
-
-        $inputPersonalizationPolicyPath = "HKLM:\SOFTWARE\Policies\Microsoft\InputPersonalization"
-        if (-not (Test-Path $inputPersonalizationPolicyPath)) { New-Item -Path $inputPersonalizationPolicyPath -Force | Out-Null }
-        Set-ItemProperty -Path $inputPersonalizationPolicyPath -Name "AllowInputPersonalization" -Value 0 -Force
-
-        $inputPersonalizationPath = "HKCU:\Software\Microsoft\InputPersonalization"
-        if (-not (Test-Path $inputPersonalizationPath)) { New-Item -Path $inputPersonalizationPath -Force | Out-Null }
-        Set-ItemProperty -Path $inputPersonalizationPath -Name "RestrictImplicitInkCollection" -Value 1 -Force
-        Set-ItemProperty -Path $inputPersonalizationPath -Name "RestrictImplicitTextCollection" -Value 1 -Force
-
-        $trainedDataStorePath = "HKCU:\Software\Microsoft\InputPersonalization\TrainedDataStore"
-        if (-not (Test-Path $trainedDataStorePath)) { New-Item -Path $trainedDataStorePath -Force | Out-Null }
-        Set-ItemProperty -Path $trainedDataStorePath -Name "HarvestContacts" -Value 0 -Force
-
-        $speechPrivacyPath = "HKCU:\Software\Microsoft\Speech_OneCore\Settings\OnlineSpeechPrivacy"
-        if (-not (Test-Path $speechPrivacyPath)) { New-Item -Path $speechPrivacyPath -Force | Out-Null }
-        Set-ItemProperty -Path $speechPrivacyPath -Name "HasAccepted" -Value 0 -Force -ErrorAction SilentlyContinue
-
-        $voiceActivationPath = "HKCU:\Software\Microsoft\Speech_OneCore\Settings\VoiceActivation\UserPreferenceForAllApps"
-        if (-not (Test-Path $voiceActivationPath)) { New-Item -Path $voiceActivationPath -Force | Out-Null }
-        Set-ItemProperty -Path $voiceActivationPath -Name "AgentActivationEnabled" -Value 0 -Force -ErrorAction SilentlyContinue
-
-        # 5. Disable additional cloud content surfaces commonly used to surface AI features.
-        $cloudContentPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent"
-        if (-not (Test-Path $cloudContentPath)) { New-Item -Path $cloudContentPath -Force | Out-Null }
-        Set-ItemProperty -Path $cloudContentPath -Name "DisableWindowsConsumerFeatures" -Value 1 -Force
-
-        # 6. Remove removable AI-related app packages if they exist.
-        try {
-            $aiPackages = Get-AppxPackage -AllUsers | Where-Object {
-                $_.Name -like "*Copilot*" -or
-                $_.Name -like "*WindowsAI*" -or
-                $_.Name -eq "Microsoft.BingSearch" -or
-                $_.Name -eq "Microsoft.549981C3F5F10"
-            }
-            foreach ($package in $aiPackages) {
-                Write-Host "Removing AI-related package: $($package.Name)" -ForegroundColor Cyan
-                Remove-AppxPackage -Package $package.PackageFullName -AllUsers -ErrorAction SilentlyContinue
-            }
-        } catch {
-            Write-Host "No removable AI-related packages found or removal failed: $($_.Exception.Message)" -ForegroundColor Yellow
-        }
-
-        # 7. Restart Explorer and related processes to apply changes.
-        Write-Host "Restarting Explorer and related processes..." -ForegroundColor Cyan
-        
-        # Store form state
-        $formWasTopMost = $Form.TopMost
-        $Form.TopMost = $false  # Temporarily disable to avoid conflicts
-        
-        Stop-Process -Name Copilot -Force -ErrorAction SilentlyContinue
-        Stop-Process -Name explorer -Force -ErrorAction SilentlyContinue
-        Stop-Process -Name SearchApp -Force -ErrorAction SilentlyContinue
-        Stop-Process -Name SearchHost -Force -ErrorAction SilentlyContinue
-        Stop-Process -Name StartMenuExperienceHost -Force -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 3  # Give more time for processes to restart
-        Start-Process explorer
-        
-        # Wait a bit more and restore form focus
-        Start-Sleep -Seconds 2
-        $Form.TopMost = $formWasTopMost
-        $Form.Activate()
-        $Form.BringToFront()
-
-        Write-Host "Windows AI features and Copilot integrations have been disabled." -ForegroundColor Green
-        Write-Host "Note: A restart may be required for all changes to take effect." -ForegroundColor Yellow
-
-    } "Disable-WindowsAI"
-}
-
-function Optimize-Gaming {
+function Optimise-Gaming {
     Safe-Execute {
         # Disable Xbox Game Bar and Game DVR (reduces background overhead)
         $gameBarPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR"
@@ -536,7 +654,7 @@ function Optimize-Gaming {
         Set-ItemProperty -Path $gameBarPath2 -Name "UseNexusForGameBarEnabled" -Value 0 -Force -ErrorAction SilentlyContinue
         Set-ItemProperty -Path $gameBarPath2 -Name "ShowStartupPanel" -Value 0 -Force -ErrorAction SilentlyContinue
 
-        # Enable Game Mode for better CPU/GPU prioritization
+        # Enable Game Mode for better CPU/GPU prioritisation
         Set-ItemProperty -Path $gameBarPath2 -Name "AutoGameModeEnabled" -Value 1 -Force
 
         # Enable Hardware-Accelerated GPU Scheduling (Windows 10 2004+)
@@ -547,16 +665,16 @@ function Optimize-Gaming {
         Set-ItemProperty -Path "HKCU:\Control Panel\Mouse" -Name "MouseThreshold1" -Value "0" -Force
         Set-ItemProperty -Path "HKCU:\Control Panel\Mouse" -Name "MouseThreshold2" -Value "0" -Force
 
-        # Disable fullscreen optimizations globally
+        # Disable fullscreen optimisations globally
         $gameConfigPath = "HKCU:\System\GameConfigStore"
         if (-not (Test-Path $gameConfigPath)) { New-Item -Path $gameConfigPath -Force | Out-Null }
         Set-ItemProperty -Path $gameConfigPath -Name "GameDVR_FSEBehaviorMode" -Value 2 -Force -ErrorAction SilentlyContinue
         Set-ItemProperty -Path $gameConfigPath -Name "GameDVR_HonorUserFSEBehaviorMode" -Value 1 -Force -ErrorAction SilentlyContinue
 
-    } "Gaming Performance Optimizations"
+    } "Gaming Performance Optimisations"
 }
 
-function Optimize-Storage {
+function Optimise-Storage {
     Safe-Execute {
         # Disable NTFS 8.3 filename creation (reduces metadata overhead)
         fsutil behavior set disable8dot3 1 2>$null
@@ -564,7 +682,7 @@ function Optimize-Storage {
         # Disable NTFS last access timestamp (reduces disk writes on every file read)
         fsutil behavior set disablelastaccess 1 2>$null
 
-        # Disable Delivery Optimization (prevents Windows using your bandwidth to seed updates to others)
+        # Disable Delivery Optimisation (prevents Windows using your bandwidth to seed updates to others)
         $doRegPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization"
         if (-not (Test-Path $doRegPath)) { New-Item -Path $doRegPath -Force | Out-Null }
         Set-ItemProperty -Path $doRegPath -Name "DODownloadMode" -Value 0 -Force
@@ -583,10 +701,10 @@ function Optimize-Storage {
         if (-not (Test-Path $storageSensePath)) { New-Item -Path $storageSensePath -Force | Out-Null }
         Set-ItemProperty -Path $storageSensePath -Name "01" -Value 0 -Force
 
-    } "Storage & File System Optimizations"
+    } "Storage & File System Optimisations"
 }
 
-function Optimize-Startup {
+function Optimise-Startup {
     Safe-Execute {
         # Remove startup delay for apps (Windows adds a 10-second delay by default)
         $startupDelayPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize"
@@ -614,10 +732,10 @@ function Optimize-Startup {
         # Increase processor scheduling priority for foreground applications
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 38 -Force
 
-    } "Startup & Boot Optimizations"
+    } "Startup & Boot Optimisations"
 }
 
-function Optimize-ScheduledTasks {
+function Optimise-ScheduledTasks {
     Safe-Execute {
         Write-Host "Disabling unnecessary scheduled tasks..." -ForegroundColor Cyan
 
@@ -657,7 +775,7 @@ function Optimize-ScheduledTasks {
         }
 
         Write-Host "Scheduled task cleanup complete." -ForegroundColor Green
-    } "Optimize-ScheduledTasks"
+    } "Optimise-ScheduledTasks"
 }
 
 function Disable-WindowsWidgets {
@@ -686,12 +804,12 @@ function Disable-WindowsWidgets {
 }
 
 
-function Optimize-UICleanup {
+function Optimise-UICleanup {
     Safe-Execute {
         # Disable transparency effects
-        $personalizePath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-        if (-not (Test-Path $personalizePath)) { New-Item -Path $personalizePath -Force | Out-Null }
-        Set-ItemProperty -Path $personalizePath -Name "EnableTransparency" -Value 0 -Force
+        $personalisePath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
+        if (-not (Test-Path $personalisePath)) { New-Item -Path $personalisePath -Force | Out-Null }
+        Set-ItemProperty -Path $personalisePath -Name "EnableTransparency" -Value 0 -Force
 
         # Disable Windows Spotlight, lock screen ads, Start menu suggestions, and Windows Tips
         $cdmPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"
@@ -727,7 +845,7 @@ function Optimize-UICleanup {
     } "UI & Notification Cleanup"
 }
 
-function Optimize-Privacy {
+function Optimise-Privacy {
     Safe-Execute {
         # Disable Windows Feedback / SIUF prompts
         $siufPath = "HKCU:\SOFTWARE\Microsoft\Siuf\Rules"
@@ -740,7 +858,7 @@ function Optimize-Privacy {
         if (-not (Test-Path $privacyPath)) { New-Item -Path $privacyPath -Force | Out-Null }
         Set-ItemProperty -Path $privacyPath -Name "TailoredExperiencesWithDiagnosticDataEnabled" -Value 0 -Force
 
-        # Disable inking and typing personalization (prevents sending keystrokes to Microsoft)
+        # Disable inking and typing personalisation (prevents sending keystrokes to Microsoft)
         $inkPath = "HKCU:\Software\Microsoft\InputPersonalization"
         if (-not (Test-Path $inkPath)) { New-Item -Path $inkPath -Force | Out-Null }
         Set-ItemProperty -Path $inkPath -Name "RestrictImplicitInkCollection" -Value 1 -Force
@@ -750,14 +868,14 @@ function Optimize-Privacy {
         if (-not (Test-Path $inkStorePath)) { New-Item -Path $inkStorePath -Force | Out-Null }
         Set-ItemProperty -Path $inkStorePath -Name "HarvestContacts" -Value 0 -Force
 
-        # Disable speech/Cortana voice activation and personalization
+        # Disable speech and Cortana voice activation and personalisation
         $speechPath = "HKCU:\Software\Microsoft\Speech_OneCore\Settings\VoiceActivation\UserPreferenceForAllApps"
         if (-not (Test-Path $speechPath)) { New-Item -Path $speechPath -Force | Out-Null }
         Set-ItemProperty -Path $speechPath -Name "AgentActivationEnabled" -Value 0 -Force
 
-        $personalizationPath = "HKCU:\Software\Microsoft\Personalization\Settings"
-        if (-not (Test-Path $personalizationPath)) { New-Item -Path $personalizationPath -Force | Out-Null }
-        Set-ItemProperty -Path $personalizationPath -Name "AcceptedPrivacyPolicy" -Value 0 -Force
+        $personalisationPath = "HKCU:\Software\Microsoft\Personalization\Settings"
+        if (-not (Test-Path $personalisationPath)) { New-Item -Path $personalisationPath -Force | Out-Null }
+        Set-ItemProperty -Path $personalisationPath -Name "AcceptedPrivacyPolicy" -Value 0 -Force
 
         # Disable sending handwriting data to Microsoft
         $handwritingPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\TabletPC"
@@ -805,7 +923,7 @@ function Optimize-Privacy {
         Set-ItemProperty -Path $findMyPath -Name "AllowFindMyDevice" -Value 0 -Force
 
         Write-Host "Privacy hardening complete." -ForegroundColor Green
-    } "Optimize-Privacy"
+    } "Optimise-Privacy"
 }
 
 function Apply-ProfileBasedDebloat {
@@ -888,7 +1006,7 @@ function Apply-ProfileBasedDebloat {
     } "Apply-ProfileBasedDebloat"
 }
 
-function Optimize-AdditionalServices {
+function Optimise-AdditionalServices {
     Safe-Execute {
         # Services that are safe to disable on most desktop/laptop systems
         $servicesToDisable = @(
@@ -908,10 +1026,10 @@ function Optimize-AdditionalServices {
             @{ Name = "icssvc";          Label = "Wi-Fi Tethering/Hotspot service" },
             @{ Name = "WbioSrvc";        Label = "Windows Biometric (disable if no fingerprint/Hello)" },
             @{ Name = "WMPNetworkSvc";   Label = "Windows Media Player Network Sharing" },
-            @{ Name = "DoSvc";           Label = "Delivery Optimization (peer-to-peer updates - not needed on single PC)" },
+            @{ Name = "DoSvc";           Label = "Delivery Optimisation (peer-to-peer updates - not needed on single PC)" },
             @{ Name = "InventorySvc";    Label = "Inventory and Compatibility Appraisal (telemetry)" },
             @{ Name = "NPSMSvc";         Label = "Now Playing Session Manager (media telemetry)" },
-            @{ Name = "whesvc";          Label = "Windows Health and Optimized Experiences (telemetry/diagnostics)" }
+            @{ Name = "whesvc";          Label = "Windows Health and Optimised Experiences (telemetry/diagnostics)" }
         )
 
         foreach ($svc in $servicesToDisable) {
@@ -969,10 +1087,10 @@ function Optimize-AdditionalServices {
         }
 
         Write-Host "Additional service cleanup complete." -ForegroundColor Green
-    } "Optimize-AdditionalServices"
+    } "Optimise-AdditionalServices"
 }
 
-function Optimize-RAMFootprint {
+function Optimise-RAMFootprint {
     Safe-Execute {
         # Consolidate service host groups to reduce idle RAM usage (requires reboot).
         # On systems with large memory, Windows often splits many svchost processes.
@@ -1007,13 +1125,13 @@ function Optimize-RAMFootprint {
             }
         }
 
-        Write-Host "RAM footprint optimizations applied. Restart recommended for full effect." -ForegroundColor Yellow
-    } "RAM Footprint Optimizations"
+        Write-Host "RAM footprint optimisations applied. Restart recommended for full effect." -ForegroundColor Yellow
+    } "RAM Footprint Optimisations"
 }
 
-function Optimize-RAMDeep {
+function Optimise-RAMDeep {
     Safe-Execute {
-        # Deep memory mode: disables virtualization/VBS features that reserve RAM.
+        # Deep memory mode: disables virtualisation and VBS features that reserve RAM.
         # This improves idle RAM usage but impacts Hyper-V, WSL2, Sandbox, and VBS security features.
         $deepFeatures = @(
             "Microsoft-Hyper-V-All",
@@ -1042,10 +1160,10 @@ function Optimize-RAMDeep {
         bcdedit /set hypervisorlaunchtype off 2>$null | Out-Null
 
         Write-Host "Deep RAM mode applied. REBOOT required. Hyper-V/WSL2/Sandbox/VBS will be disabled." -ForegroundColor Yellow
-    } "Deep RAM Optimizations"
+    } "Deep RAM Optimisations"
 }
 
-function Revert-Optimizations {
+function Revert-Optimisations {
     Safe-Execute {
         # Remove policy-enforced settings so Windows can return to defaults.
         $policyValuesToRemove = @(
@@ -1055,13 +1173,6 @@ function Revert-Optimizations {
             @{ Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search"; Name = "AllowCortana" },
             @{ Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors"; Name = "DisableLocation" },
             @{ Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy"; Name = "LetAppsRunInBackground" },
-            @{ Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot"; Name = "TurnOffWindowsCopilot" },
-            @{ Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsAI"; Name = "DisableAIDataAnalysis" },
-            @{ Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsAI"; Name = "DisableSettingsAgent" },
-            @{ Path = "HKCU:\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot"; Name = "TurnOffWindowsCopilot" },
-            @{ Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer"; Name = "DisableSearchBoxSuggestions" },
-            @{ Path = "HKLM:\SOFTWARE\Policies\Microsoft\Speech"; Name = "AllowOnlineSpeechRecognition" },
-            @{ Path = "HKLM:\SOFTWARE\Policies\Microsoft\InputPersonalization"; Name = "AllowInputPersonalization" },
             @{ Path = "HKLM:\SOFTWARE\Policies\Microsoft\Dsh"; Name = "AllowNewsAndInterests" },
             @{ Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Feeds"; Name = "EnableFeeds" },
             @{ Path = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR"; Name = "AllowGameDVR" }
@@ -1073,7 +1184,7 @@ function Revert-Optimizations {
             }
         }
 
-        # Restore user-facing defaults for UI and gaming behavior.
+        # Restore user-facing defaults for UI and gaming behaviour.
         $userDefaults = @(
             @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects"; Name = "VisualFXSetting"; Value = 0 },
             @{ Path = "HKCU:\Control Panel\Desktop\WindowMetrics"; Name = "MinAnimate"; Value = 1 },
@@ -1099,18 +1210,9 @@ function Revert-Optimizations {
             @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; Name = "SoftLandingEnabled"; Value = 1 },
             @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"; Name = "SystemPaneSuggestionsEnabled"; Value = 1 },
             @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\SearchSettings"; Name = "IsDynamicSearchBoxEnabled"; Value = 1 },
-            @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\SearchSettings"; Name = "IsAADCloudSearchEnabled"; Value = 1 },
-            @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\SearchSettings"; Name = "IsMSACloudSearchEnabled"; Value = 1 },
-            @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\SearchSettings"; Name = "IsCopilotEnabled"; Value = 1 },
-            @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\SearchSettings"; Name = "IsCopilotAvailable"; Value = 1 },
-            @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"; Name = "ShowCopilotButton"; Value = 1 },
             @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"; Name = "TaskbarDa"; Value = 1 },
             @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Feeds"; Name = "ShellFeedsTaskbarViewMode"; Value = 0 },
-            @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"; Name = "DisabledHotkeys"; Value = 0 },
-            @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search"; Name = "BingSearchEnabled"; Value = 1 },
-            @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search"; Name = "CortanaConsent"; Value = 1 },
             @{ Path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search"; Name = "AllowSearchToUseLocation"; Value = 1 },
-            @{ Path = "HKCU:\Software\Microsoft\Speech_OneCore\Settings\OnlineSpeechPrivacy"; Name = "HasAccepted"; Value = 1 },
             @{ Path = "HKCU:\Control Panel\Mouse"; Name = "MouseSpeed"; Value = "1" },
             @{ Path = "HKCU:\Control Panel\Mouse"; Name = "MouseThreshold1"; Value = "6" },
             @{ Path = "HKCU:\Control Panel\Mouse"; Name = "MouseThreshold2"; Value = "10" },
@@ -1122,6 +1224,13 @@ function Revert-Optimizations {
         foreach ($entry in $userDefaults) {
             if (-not (Test-Path $entry.Path)) { New-Item -Path $entry.Path -Force | Out-Null }
             Set-ItemProperty -Path $entry.Path -Name $entry.Name -Value $entry.Value -Force -ErrorAction SilentlyContinue
+        }
+
+        $backgroundRoot = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\BackgroundAccessApplications'
+        if (Test-Path $backgroundRoot) {
+            Get-ChildItem -Path $backgroundRoot -ErrorAction SilentlyContinue | ForEach-Object {
+                Remove-ItemProperty -LiteralPath $_.PSPath -Name 'BackgroundAccess' -Force -ErrorAction SilentlyContinue
+            }
         }
 
         # Restore machine defaults for performance and startup related tweaks.
@@ -1148,11 +1257,39 @@ function Revert-Optimizations {
 
         # Remove specific startup delay override and restore hibernation/hypervisor defaults.
         Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize" -Name "StartupDelayInMSec" -ErrorAction SilentlyContinue
+        powercfg -setactive 381b4222-f694-41f0-9685-ff5bb260df2e 2>$null | Out-Null
+        Enable-AttachedDevicePowerSaving
+        Remove-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling' -Name 'PowerThrottlingOff' -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile' -Name 'SystemResponsiveness' -Value 20 -Type DWord -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'MenuShowDelay' -Value '400' -Type String -Force -ErrorAction SilentlyContinue
+        foreach ($edgePolicy in @('HKLM:\SOFTWARE\Policies\Microsoft\Edge', 'HKCU:\SOFTWARE\Policies\Microsoft\Edge')) {
+            if (Test-Path $edgePolicy) {
+                foreach ($edgeName in @('StartupBoostEnabled', 'BackgroundModeEnabled', 'SleepingTabsEnabled')) {
+                    Remove-ItemProperty -Path $edgePolicy -Name $edgeName -Force -ErrorAction SilentlyContinue
+                }
+            }
+        }
+        $nduPath = 'HKLM:\SYSTEM\CurrentControlSet\Services\Ndu'
+        if (Test-Path $nduPath) {
+            Set-ItemProperty -Path $nduPath -Name 'Start' -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
+        }
+        $prefetchPath = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters'
+        if (Test-Path $prefetchPath) {
+            Set-ItemProperty -Path $prefetchPath -Name 'EnablePrefetcher' -Value 3 -Type DWord -Force -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $prefetchPath -Name 'EnableSuperfetch' -Value 3 -Type DWord -Force -ErrorAction SilentlyContinue
+        }
+        $gamesPath = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games'
+        if (Test-Path $gamesPath) {
+            Set-ItemProperty -Path $gamesPath -Name 'Priority' -Value 2 -Type DWord -Force -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $gamesPath -Name 'Scheduling Category' -Value 'Medium' -Type String -Force -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $gamesPath -Name 'SFIO Priority' -Value 'Normal' -Type String -Force -ErrorAction SilentlyContinue
+        }
+
         powercfg -h on 2>$null | Out-Null
         bcdedit /set hypervisorlaunchtype auto 2>$null | Out-Null
         bcdedit /timeout 30 2>$null | Out-Null
 
-        # Re-enable virtualization-related features disabled by deep RAM mode.
+        # Re-enable virtualisation-related features disabled by deep RAM mode.
         $deepFeatures = @(
             "Microsoft-Hyper-V-All",
             "VirtualMachinePlatform",
@@ -1181,35 +1318,80 @@ function Revert-Optimizations {
             "RetailDemo" = "Manual"
             "wisvc" = "Manual"
             "WMPNetworkSvc" = "Manual"
+            "PNRPsvc" = "Manual"
+            "p2psvc" = "Manual"
+            "p2pimsvc" = "Manual"
+            "RemoteRegistry" = "Disabled"
+            "AJRouter" = "Manual"
+            "ALG" = "Manual"
+            "TrkWks" = "Automatic"
+            "SharedAccess" = "Manual"
+            "PhoneSvc" = "Manual"
+            "PcaSvc" = "Automatic"
+            "wercplsupport" = "Manual"
+            "stisvc" = "Manual"
+            "SCardSvr" = "Manual"
+            "ScDeviceEnum" = "Manual"
+            "icssvc" = "Manual"
+            "WbioSrvc" = "Manual"
+            "InventorySvc" = "Manual"
+            "NPSMSvc" = "Manual"
+            "whesvc" = "Manual"
+            "DPS" = "Automatic"
+            "WdiSystemHost" = "Manual"
+            "XblAuthManager" = "Manual"
+            "XblGameSave" = "Manual"
+            "XboxNetApiSvc" = "Manual"
+            "XboxGipSvc" = "Manual"
+            "CDPSvc" = "Automatic"
         }
 
         foreach ($svcName in $serviceStartupDefaults.Keys) {
             $service = Get-Service -Name $svcName -ErrorAction SilentlyContinue
             if ($service) {
                 Set-Service -Name $svcName -StartupType $serviceStartupDefaults[$svcName] -ErrorAction SilentlyContinue
-                Start-Service -Name $svcName -ErrorAction SilentlyContinue
+                if ($serviceStartupDefaults[$svcName] -ne 'Disabled') {
+                    Start-Service -Name $svcName -ErrorAction SilentlyContinue
+                }
             }
         }
 
-        Write-Host "Revert optimizations completed. Reboot recommended to fully restore defaults." -ForegroundColor Yellow
-    } "Revert Optimizations"
+        $servicePatterns = @{
+            'OneSyncSvc*' = 'Automatic'
+            'cbdhsvc*' = 'Automatic'
+            'WpnUserService*' = 'Automatic'
+            'CDPUserSvc*' = 'Automatic'
+            'BcastDVRUserService*' = 'Manual'
+        }
+        foreach ($pattern in @($servicePatterns.Keys)) {
+            $matched = @(Get-Service -Name $pattern -ErrorAction SilentlyContinue)
+            foreach ($svc in $matched) {
+                if (-not $svc) { continue }
+                Set-Service -Name $svc.Name -StartupType $servicePatterns[$pattern] -ErrorAction SilentlyContinue
+            }
+        }
+
+        Write-Host "Revert optimisations completed. Reboot recommended to fully restore defaults." -ForegroundColor Yellow
+    } "Revert Optimisations"
 }
 
-if ($AutomatedMode) {
-    # Run all optimizations automatically with progress reporting
-    Show-Progress "Starting system optimization..." 0
+if ($AutomatedMode -and [string]::IsNullOrWhiteSpace($OptimisationAction)) {
+    # Run all optimisations automatically with progress reporting
+    Show-Progress "Starting system optimisation..." 0
     Show-Progress "Starting automated profile without visual optimisation..." 10
     
-    # Performance optimizations
-    Show-Progress "Applying performance optimizations..." 60
-    Optimize-PowerSettings
-    Optimize-NetworkSettings
-    Optimize-MemoryManagement
+    # Performance optimisations
+    Show-Progress "Applying performance optimisations..." 60
+    Optimise-PowerSettings
+    Optimise-NetworkSettings
+    Optimise-MemoryManagement
+    Optimise-RuntimeFootprint
+    Optimise-ScheduledTasks
     
-    # Service optimizations
-    Show-Progress "Optimizing system services..." 80
+    # Service optimisations
+    Show-Progress "Optimising system services..." 80
     $sysmainService = Get-Service "SysMain" -ErrorAction SilentlyContinue
-    if ($sysmainService) {
+    if ($sysmainService -and (Test-SystemDiskSolidState)) {
         Stop-Service "SysMain" -Force -ErrorAction SilentlyContinue
         Set-Service "SysMain" -StartupType Disabled -ErrorAction SilentlyContinue
     }
@@ -1228,17 +1410,17 @@ if ($AutomatedMode) {
 
     # Additional service cleanup
     Show-Progress "Disabling additional services..." 90
-    Optimize-AdditionalServices
+    Optimise-AdditionalServices
 
-    # RAM footprint optimization (safe mode)
-    Show-Progress "Optimizing RAM footprint..." 94
-    Optimize-RAMFootprint
+    # RAM footprint optimisation (safe mode)
+    Show-Progress "Optimising RAM footprint..." 94
+    Optimise-RAMFootprint
     
     ExecutionCompleted
     exit 0
 }
 
-# Scripts to optimize Windows with detailed action descriptions
+# Scripts to optimise Windows with detailed action descriptions
 $VisualOptimisation = {
     try {
         Write-Host "Starting Visual Optimisation..." -ForegroundColor Cyan
@@ -1295,19 +1477,25 @@ $DisableTelemetry = {
     }
 }
 
-$PerformanceOptimizations = {
+$PerformanceOptimisations = {
     try {
-        Write-Host "Starting Performance Optimizations..." -ForegroundColor Cyan
-        Optimize-PowerSettings
-        Optimize-NetworkSettings
-        Optimize-MemoryManagement
+        Write-Host "Starting Performance Optimisations..." -ForegroundColor Cyan
+        Optimise-PowerSettings
+        Optimise-NetworkSettings
+        Optimise-MemoryManagement
+        Optimise-RuntimeFootprint
+        Optimise-ScheduledTasks
         
-        # Disable Superfetch/SysMain (Windows 10/11)
+        # SysMain helps a hard disk. On an SSD it mostly holds RAM, so turn it off there only.
         $sysmainService = Get-Service "SysMain" -ErrorAction SilentlyContinue
         if ($sysmainService) {
-            Stop-Service "SysMain" -Force -ErrorAction SilentlyContinue
-            Set-Service "SysMain" -StartupType Disabled -ErrorAction SilentlyContinue
-            Write-Host "SysMain (Superfetch) disabled" -ForegroundColor Green
+            if (Test-SystemDiskSolidState) {
+                Stop-Service "SysMain" -Force -ErrorAction SilentlyContinue
+                Set-Service "SysMain" -StartupType Disabled -ErrorAction SilentlyContinue
+                Write-Host "SysMain (Superfetch) disabled because the system disk is solid-state" -ForegroundColor Green
+            } else {
+                Write-Host "SysMain (Superfetch) left enabled because the system disk is not a detected SSD" -ForegroundColor Yellow
+            }
         }
         
         # Disable Windows Search Indexing for better performance (optional)
@@ -1335,86 +1523,64 @@ $PerformanceOptimizations = {
         
         ExecutionCompleted
     } catch {
-        Write-Host "Error during Performance Optimizations: $_" -ForegroundColor Red
+        Write-Host "Error during Performance Optimisations: $_" -ForegroundColor Red
     }
 }
 
-$DisableWindowsAI = {
+$GamingOptimisations = {
     try {
-        $confirmAI = [System.Windows.Forms.MessageBox]::Show(
-            "This will disable Windows AI surfaces including Copilot, cloud-assisted search, online speech, Recall-related policy settings, and related AI packages where removable.`n`nContinue?",
-            "Disable Windows AI",
-            "YesNo",
-            "Warning"
-        )
-
-        if ($confirmAI -ne [System.Windows.Forms.DialogResult]::Yes) {
-            Write-Host "Windows AI disablement cancelled by user." -ForegroundColor Yellow
-            return
-        }
-
-        Write-Host "Disabling Windows AI features..." -ForegroundColor Cyan
-        Disable-WindowsAI
+        Write-Host "Applying gaming performance optimisations..." -ForegroundColor Cyan
+        Optimise-Gaming
         ExecutionCompleted
     } catch {
-        Write-Host "Error disabling Windows AI features: $_" -ForegroundColor Red
+        Write-Host "Error during gaming optimisations: $_" -ForegroundColor Red
     }
 }
 
-$GamingOptimizations = {
+$StorageOptimisations = {
     try {
-        Write-Host "Applying gaming performance optimizations..." -ForegroundColor Cyan
-        Optimize-Gaming
+        Write-Host "Applying storage and file system optimisations..." -ForegroundColor Cyan
+        Optimise-Storage
         ExecutionCompleted
     } catch {
-        Write-Host "Error during gaming optimizations: $_" -ForegroundColor Red
+        Write-Host "Error during storage optimisations: $_" -ForegroundColor Red
     }
 }
 
-$StorageOptimizations = {
+$StartupOptimisations = {
     try {
-        Write-Host "Applying storage and file system optimizations..." -ForegroundColor Cyan
-        Optimize-Storage
+        Write-Host "Applying startup and boot optimisations..." -ForegroundColor Cyan
+        Optimise-Startup
         ExecutionCompleted
     } catch {
-        Write-Host "Error during storage optimizations: $_" -ForegroundColor Red
+        Write-Host "Error during startup optimisations: $_" -ForegroundColor Red
     }
 }
 
-$StartupOptimizations = {
-    try {
-        Write-Host "Applying startup and boot optimizations..." -ForegroundColor Cyan
-        Optimize-Startup
-        ExecutionCompleted
-    } catch {
-        Write-Host "Error during startup optimizations: $_" -ForegroundColor Red
-    }
-}
-
-$ScheduledTasksOptimizations = {
+$ScheduledTasksOptimisations = {
     try {
         Write-Host "Cleaning up scheduled tasks..." -ForegroundColor Cyan
-        Optimize-ScheduledTasks
+        Optimise-ScheduledTasks
         ExecutionCompleted
     } catch {
         Write-Host "Error during scheduled task cleanup: $_" -ForegroundColor Red
     }
 }
 
-$PrivacyOptimizations = {
+$PrivacyOptimisations = {
     try {
         Write-Host "Applying privacy hardening..." -ForegroundColor Cyan
-        Optimize-Privacy
+        Optimise-Privacy
         ExecutionCompleted
     } catch {
         Write-Host "Error during privacy hardening: $_" -ForegroundColor Red
     }
 }
 
-$AdditionalServicesOptimizations = {
+$AdditionalServicesOptimisations = {
     try {
         Write-Host "Disabling additional unnecessary services..." -ForegroundColor Cyan
-        Optimize-AdditionalServices
+        Optimise-AdditionalServices
         ExecutionCompleted
     } catch {
         Write-Host "Error during additional service cleanup: $_" -ForegroundColor Red
@@ -1424,106 +1590,94 @@ $AdditionalServicesOptimizations = {
 $UICleanup = {
     try {
         Write-Host "Cleaning up UI and notifications..." -ForegroundColor Cyan
-        Optimize-UICleanup
+        Optimise-UICleanup
         ExecutionCompleted
     } catch {
         Write-Host "Error during UI cleanup: $_" -ForegroundColor Red
     }
 }
 
-$RAMOptimizations = {
+$RAMOptimisations = {
     try {
-        Write-Host "Applying RAM footprint optimizations..." -ForegroundColor Cyan
-        Optimize-RAMFootprint
+        Write-Host "Applying RAM footprint optimisations..." -ForegroundColor Cyan
+        Optimise-RAMFootprint
+        Optimise-RuntimeFootprint
         ExecutionCompleted
     } catch {
-        Write-Host "Error during RAM optimizations: $_" -ForegroundColor Red
+        Write-Host "Error during RAM optimisations: $_" -ForegroundColor Red
     }
 }
 
-$DeepRamOptimizations = {
+$DeepRamOptimisations = {
     try {
         $confirmDeep = [System.Windows.Forms.MessageBox]::Show(
             "Deep RAM mode applies aggressive memory-footprint changes and disables Hyper-V, WSL2, Windows Sandbox, and VBS features.`n`nThis can affect developer tooling, virtual machines, and security hardening.`n`nA reboot is required.`n`nContinue?",
-            "Deep RAM Optimization",
+            "Deep RAM Optimisation",
             "YesNo",
             "Warning"
         )
 
         if ($confirmDeep -ne [System.Windows.Forms.DialogResult]::Yes) {
-            Write-Host "Deep RAM optimization cancelled by user." -ForegroundColor Yellow
+            Write-Host "Deep RAM optimisation cancelled by user." -ForegroundColor Yellow
             return
         }
 
-        Write-Host "Applying deep RAM optimizations..." -ForegroundColor Cyan
-        Optimize-RAMDeep
+        Write-Host "Applying deep RAM optimisations..." -ForegroundColor Cyan
+        Optimise-RAMDeep
         ExecutionCompleted
     } catch {
-        Write-Host "Error during deep RAM optimizations: $_" -ForegroundColor Red
+        Write-Host "Error during deep RAM optimisations: $_" -ForegroundColor Red
     }
 }
 
-$RevertOptimizations = {
+$RevertOptimisations = {
     try {
         $confirmRevert = [System.Windows.Forms.MessageBox]::Show(
             "This will revert optimisation settings towards Windows defaults.`n`nIt includes service startup types, UI/privacy policies, RAM footprint tuning, and virtualisation-related adjustments.`n`nA reboot is strongly recommended afterwards.`n`nContinue?",
-            "Revert Optimizations",
+            "Revert Optimisations",
             "YesNo",
             "Warning"
         )
 
         if ($confirmRevert -ne [System.Windows.Forms.DialogResult]::Yes) {
-            Write-Host "Revert optimizations cancelled by user." -ForegroundColor Yellow
+            Write-Host "Revert optimisations cancelled by user." -ForegroundColor Yellow
             return
         }
 
-        Write-Host "Reverting optimizations..." -ForegroundColor Cyan
-        Revert-Optimizations
+        Write-Host "Reverting optimisations..." -ForegroundColor Cyan
+        Revert-Optimisations
         ExecutionCompleted
     } catch {
-        Write-Host "Error during optimization revert: $_" -ForegroundColor Red
+        Write-Host "Error during optimisation revert: $_" -ForegroundColor Red
     }
 }
 
-$DoallAbove = {
-    try {
-        Write-Host "Executing all optimizations..." -ForegroundColor Cyan
-        $includeAI = [System.Windows.Forms.MessageBox]::Show(
-            "Would you also like to disable Windows AI features during the full optimisation run?`n`nYes: disables Copilot, Recall-related policy paths, online speech AI surfaces, and cloud-assisted AI/search integrations.`nNo: keeps Windows AI features enabled.",
-            "Full Optimization - Windows AI",
-            "YesNo",
-            "Question"
-        )
-
-        & $VisualOptimisation
-        & $PerformanceOptimizations
-        & $GamingOptimizations
-        & $StorageOptimizations
-        & $StartupOptimizations
-
-        if (Test-Path $WindowsPrivacyScript) {
-            $privacyArgs = @('--automated', '--profile', $OptimizationProfile)
-            if ($includeAI -eq [System.Windows.Forms.DialogResult]::Yes) {
-                $privacyArgs += '--disable-ai'
-            }
-
-            Write-Host "Running dedicated Windows Privacy module..." -ForegroundColor Cyan
-            & $WindowsPrivacyScript @privacyArgs
-        } else {
-            Write-Host "Windows Privacy script not found, using in-script privacy routines." -ForegroundColor Yellow
-            & $PrivacyOptimizations
-            if ($includeAI -eq [System.Windows.Forms.DialogResult]::Yes) {
-                & $DisableWindowsAI
-            }
-            & $UICleanup
+if (-not [string]::IsNullOrWhiteSpace($OptimisationAction)) {
+    $actionKey = $OptimisationAction.ToLowerInvariant()
+    Write-Host "Running optimisation action: $actionKey" -ForegroundColor Cyan
+    switch ($actionKey) {
+        'backgroundapps' { & $Turnoffbackgroundapps }
+        'services' { & $DisableServices }
+        'telemetry' { & $DisableTelemetry }
+        'performance' { & $PerformanceOptimisations }
+        'scheduledtasks' { & $ScheduledTasksOptimisations }
+        'gaming' { & $GamingOptimisations }
+        'storage' { & $StorageOptimisations }
+        'startup' { & $StartupOptimisations }
+        'uicleanup' { & $UICleanup }
+        'privacy' { & $PrivacyOptimisations }
+        'additionalservices' { & $AdditionalServicesOptimisations }
+        'ramfootprint' { & $RAMOptimisations }
+        'deepram' {
+            Write-Host "Deep RAM disables Hyper-V, WSL, Windows Sandbox, and virtualisation-based security. Restart when it finishes." -ForegroundColor Yellow
+            Optimise-RAMDeep
         }
-
-        & $AdditionalServicesOptimizations
-        & $RAMOptimizations
-        ExecutionCompleted
-    } catch {
-        Write-Host "Error during full optimization: $_" -ForegroundColor Red
+        default {
+            Write-Host "Unknown optimisation action: $OptimisationAction" -ForegroundColor Red
+            exit 1
+        }
     }
+    exit 0
 }
 
 # Calculate paths for assets
@@ -1639,7 +1793,7 @@ $summaryPanel.BackColor = $UiPalette.CardBack
 $summaryPanel.BorderStyle = 'FixedSingle'
 
 $summaryLabel = New-Object System.Windows.Forms.Label
-$summaryLabel.Text = "Recommended sequence: Performance Optimisations, Privacy Hardening, Additional Services, RAM Footprint, then UI and notifications cleanup. Leave Deep RAM off unless virtualisation features are definitely not required."
+$summaryLabel.Text = "Recommended sequence: Performance Optimisations, Privacy Hardening, Additional Services, RAM Footprint, then UI and notifications cleanup. Performance now includes the max power plan and device power-saving off. Leave Deep RAM off unless virtualisation features are definitely not required."
 $summaryLabel.Size = New-Object System.Drawing.Size(($formWidth - 60), 40)
 $summaryLabel.Location = New-Object System.Drawing.Point(10, 8)
 $summaryLabel.ForeColor = $UiPalette.TextMuted
@@ -1648,7 +1802,7 @@ $summaryLabel.BackColor = [System.Drawing.Color]::Transparent
 $summaryPanel.Controls.Add($summaryLabel)
 $Form.Controls.Add($summaryPanel)
 
-function Add-OptimizationSection {
+function Add-OptimisationSection {
     param(
         [string]$Text,
         [System.Drawing.Point]$Location
@@ -1668,7 +1822,7 @@ function Add-OptimizationSection {
 }
 
 # Enhanced button creation with modern styling
-function Add-OptimizationButton {
+function Add-OptimisationButton {
     param (
         [string]$Text,
         [System.Drawing.Point]$Location,
@@ -1690,7 +1844,7 @@ function Add-OptimizationButton {
     }
     $Button.FlatAppearance.BorderSize = 1
 
-    # Category-based color coding
+    # Category-based colour coding
     switch ($Category) {
         "Visual" {
             $Button.BackColor = $UiPalette.Visual
@@ -1734,9 +1888,9 @@ function Add-OptimizationButton {
             if ($script:statusBar) { $script:statusBar.Refresh() }
             Update-Ui -Control $script:Form
 
-            Write-Host "Starting optimization: $buttonText" -ForegroundColor Cyan
+            Write-Host "Starting optimisation: $buttonText" -ForegroundColor Cyan
             & $Action
-            Write-Host "Completed optimization: $buttonText" -ForegroundColor Green
+            Write-Host "Completed optimisation: $buttonText" -ForegroundColor Green
 
             # Update status bar
             if ($script:statusLabel) { $script:statusLabel.Text = "Completed successfully: $buttonText" }
@@ -1779,49 +1933,45 @@ $leftButtonX = 20
 $rightButtonX = $leftButtonX + $buttonWidth + 20
 $currentY = 185
 
-# Add optimization buttons with modern styling
-Add-OptimizationSection "Balanced Defaults" (New-Object System.Drawing.Point(20, $currentY))
+# Add optimisation buttons with modern styling
+Add-OptimisationSection "Balanced Defaults" (New-Object System.Drawing.Point(20, $currentY))
 $currentY += 28
 
-Add-OptimizationButton "Visual Optimisation" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $VisualOptimisation "Visual" "Apply all visual performance changes in one pass (animations, effects, and theme responsiveness tweaks)."
-Add-OptimizationButton "Disable Background Apps" (New-Object System.Drawing.Point($rightButtonX, $currentY)) $Turnoffbackgroundapps "Services" "Restrict background app activity to lower idle CPU/RAM usage and reduce passive network traffic."
+Add-OptimisationButton "Visual Optimisation" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $VisualOptimisation "Visual" "Apply all visual performance changes in one pass (animations, effects, and theme responsiveness tweaks)."
+Add-OptimisationButton "Disable Background Apps" (New-Object System.Drawing.Point($rightButtonX, $currentY)) $Turnoffbackgroundapps "Services" "Restrict background app activity to lower idle CPU/RAM usage and reduce passive network traffic."
 $currentY += 50
 
-Add-OptimizationButton "Disable Services" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $DisableServices "Services" "Disable selected non-essential services to reduce background overhead and startup load."
-Add-OptimizationButton "Disable Telemetry" (New-Object System.Drawing.Point($rightButtonX, $currentY)) $DisableTelemetry "Privacy" "Apply policy and service-level telemetry reductions for stronger privacy defaults."
+Add-OptimisationButton "Disable Services" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $DisableServices "Services" "Disable selected non-essential services to reduce background overhead and startup load."
+Add-OptimisationButton "Disable Telemetry" (New-Object System.Drawing.Point($rightButtonX, $currentY)) $DisableTelemetry "Privacy" "Apply policy and service-level telemetry reductions for stronger privacy defaults."
 $currentY += 50
 
-Add-OptimizationButton "Performance Optimizations" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $PerformanceOptimizations "Performance" "Apply broader performance tuning across power, memory, services, and responsiveness settings."
-Add-OptimizationButton "Disable Windows AI" (New-Object System.Drawing.Point($rightButtonX, $currentY)) $DisableWindowsAI "Privacy" "Disable Copilot and related AI/cloud surfaces, including online speech and AI-assisted search features."
+Add-OptimisationButton "Performance Optimisations" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $PerformanceOptimisations "Performance" "Sets Ultimate Performance, stops attached devices from sleeping, and trims idle background RAM use."
+Add-OptimisationButton "Task Scheduler Cleanup" (New-Object System.Drawing.Point($rightButtonX, $currentY)) $ScheduledTasksOptimisations "Services" "Disable selected telemetry/diagnostic scheduled tasks that are not required on most personal systems."
 $currentY += 50
 
-Add-OptimizationSection "Performance and Privacy Extras" (New-Object System.Drawing.Point(20, $currentY))
+Add-OptimisationSection "Performance and Privacy Extras" (New-Object System.Drawing.Point(20, $currentY))
 $currentY += 28
 
-Add-OptimizationButton "Gaming Performance" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $GamingOptimizations "Performance" "Tune gaming-related settings (Game Bar/DVR, Game Mode, HAGS, mouse behaviour) for lower input and capture overhead."
-Add-OptimizationButton "Storage & File System" (New-Object System.Drawing.Point($rightButtonX, $currentY)) $StorageOptimizations "Performance" "Optimise storage/file-system behaviour, including delivery and indexing-related overhead where applicable."
+Add-OptimisationButton "Gaming Performance" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $GamingOptimisations "Performance" "Tune gaming-related settings (Game Bar/DVR, Game Mode, HAGS, mouse behaviour) for lower input and capture overhead."
+Add-OptimisationButton "Storage & File System" (New-Object System.Drawing.Point($rightButtonX, $currentY)) $StorageOptimisations "Performance" "Optimise storage/file-system behaviour, including delivery and indexing-related overhead where applicable."
 $currentY += 50
 
-Add-OptimizationButton "Startup & Boot" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $StartupOptimizations "Performance" "Adjust startup and boot behaviour to reduce delay and streamline sign-in readiness."
-Add-OptimizationButton "UI & Notifications" (New-Object System.Drawing.Point($rightButtonX, $currentY)) $UICleanup "Privacy" "Reduce distracting UI surfaces and promotional notifications (including Widgets/feeds-style elements)."
+Add-OptimisationButton "Startup & Boot" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $StartupOptimisations "Performance" "Adjust startup and boot behaviour to reduce delay and streamline sign-in readiness."
+Add-OptimisationButton "UI & Notifications" (New-Object System.Drawing.Point($rightButtonX, $currentY)) $UICleanup "Privacy" "Reduce distracting UI surfaces and promotional notifications (including Widgets/feeds-style elements)."
 $currentY += 50
 
-Add-OptimizationButton "Task Scheduler Cleanup" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $ScheduledTasksOptimizations "Services" "Disable selected telemetry/diagnostic scheduled tasks that are not required on most personal systems."
+Add-OptimisationButton "Privacy Hardening" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $PrivacyOptimisations "Privacy" "Apply additional privacy controls for feedback, tailored experiences, and selected diagnostic data paths."
+Add-OptimisationButton "Additional Services" (New-Object System.Drawing.Point($rightButtonX, $currentY)) $AdditionalServicesOptimisations "Services" "Disable extra optional services (for example Xbox/CDP-related components) where they are not needed."
 $currentY += 50
 
-Add-OptimizationButton "Privacy Hardening" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $PrivacyOptimizations "Privacy" "Apply additional privacy controls for feedback, tailored experiences, and selected diagnostic data paths."
-Add-OptimizationButton "Additional Services" (New-Object System.Drawing.Point($rightButtonX, $currentY)) $AdditionalServicesOptimizations "Services" "Disable extra optional services (for example Xbox/CDP-related components) where they are not needed."
-$currentY += 50
-
-Add-OptimizationSection "Advanced and Recovery" (New-Object System.Drawing.Point(20, $currentY))
+Add-OptimisationSection "Advanced and Recovery" (New-Object System.Drawing.Point(20, $currentY))
 $currentY += 28
 
-Add-OptimizationButton "RAM Footprint" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $RAMOptimizations "Performance" "Lower idle RAM consumption using safe service-host and background service footprint tuning."
-Add-OptimizationButton "Deep RAM (Advanced)" (New-Object System.Drawing.Point($rightButtonX, $currentY)) $DeepRamOptimizations "Privacy" "Aggressive memory reduction that disables Hyper-V/WSL2/Sandbox/VBS features (reboot required)."
+Add-OptimisationButton "RAM Footprint" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $RAMOptimisations "Performance" "Lowers idle RAM from services, Edge, widgets, and Store apps. Leaves the standby cache in place."
+Add-OptimisationButton "Deep RAM (Advanced)" (New-Object System.Drawing.Point($rightButtonX, $currentY)) $DeepRamOptimisations "Privacy" "Aggressive memory reduction that disables Hyper-V/WSL2/Sandbox/VBS features (reboot required)."
 $currentY += 50
 
-Add-OptimizationButton "Revert Optimizations" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $RevertOptimizations "Services" "Roll back optimisation changes towards default Windows behaviour where supported."
-Add-OptimizationButton "Do All Optimizations" (New-Object System.Drawing.Point($rightButtonX, $currentY)) $DoallAbove "Performance" "Run the full optimisation sequence in one pass with an optional Windows AI disable prompt."
+Add-OptimisationButton "Revert Optimisations" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $RevertOptimisations "Services" "Roll back optimisation changes towards default Windows behaviour where supported."
 $currentY += 60
 
 # Enhanced Exit button with better positioning

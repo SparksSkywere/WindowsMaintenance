@@ -37,11 +37,11 @@ function Show-Console
 show-console -hide
 
 # Modern defrag function with SSD detection for Windows 10/11
-function Start-OptimizedDefrag {
+function Start-OptimisedDefrag {
     param([string]$DriveLetter)
     
     try {
-        Write-Host "Analyzing drive $DriveLetter..." -ForegroundColor Cyan
+        Write-Host "Analysing drive $DriveLetter..." -ForegroundColor Cyan
         
         # Get drive information using modern PowerShell cmdlets
         $drive = Get-Volume -DriveLetter $DriveLetter -ErrorAction SilentlyContinue
@@ -56,14 +56,14 @@ function Start-OptimizedDefrag {
             $disk = Get-PhysicalDisk -DeviceNumber $partition.DiskNumber -ErrorAction SilentlyContinue
             if ($disk -and $disk.MediaType -eq 'SSD') {
                 $choice = [System.Windows.Forms.MessageBox]::Show(
-                    "Drive $DriveLetter appears to be an SSD. SSDs don't benefit from defragmentation but can be optimized with TRIM. Would you like to optimize instead?", 
+                    "Drive $DriveLetter appears to be an SSD. SSDs don't benefit from defragmentation but can be optimised with TRIM. Would you like to optimise instead?", 
                     "SSD Detected", 
                     'YesNo', 
                     'Question'
                 )
                 
                 if ($choice -eq 'Yes') {
-                    Write-Host "Optimizing SSD drive $DriveLetter with TRIM..." -ForegroundColor Green
+                    Write-Host "Optimising SSD drive $DriveLetter with TRIM..." -ForegroundColor Green
                     Optimize-Volume -DriveLetter $DriveLetter -ReTrim -Verbose
                 } else {
                     Write-Host "Operation cancelled for SSD drive $DriveLetter" -ForegroundColor Yellow
@@ -78,7 +78,7 @@ function Start-OptimizedDefrag {
         # Check fragmentation level first
         $null = Optimize-Volume -DriveLetter $DriveLetter -Analyze -Verbose
         
-        # Show progress dialog
+        # Show progress dialogue
         $progressForm = New-Object System.Windows.Forms.Form
         $progressForm.Text = "Defragmenting Drive $DriveLetter"
         $progressForm.Size = New-Object System.Drawing.Size(400, 120)
@@ -162,7 +162,7 @@ $listBox.Add_SelectedIndexChanged({
     }
 
     if ($selectedDriveText -match 'Drive\s-\s([A-Z]):') {
-        Start-OptimizedDefrag -DriveLetter $matches[1]
+        Start-OptimisedDefrag -DriveLetter $matches[1]
     }
 })
 

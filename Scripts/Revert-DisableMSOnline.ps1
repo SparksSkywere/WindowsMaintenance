@@ -23,6 +23,130 @@ function Invoke-RevertStep {
     }
 }
 
+function Get-TargetUserHives {
+    $hives = @('HKCU:')
+    try {
+        foreach ($key in (Get-ChildItem -Path 'Registry::HKEY_USERS' -ErrorAction Stop)) {
+            if ($key.PSChildName -match '^S-1-5-21-\d+(-\d+){3}$') {
+                $hives += "Registry::HKEY_USERS\$($key.PSChildName)"
+            }
+        }
+    } catch {
+        Write-RevertStatus "Loaded user hives could not be enumerated: $($_.Exception.Message)"
+    }
+    return $hives
+}
+
+function Remove-HiveValue {
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$SubPath,
+        [Parameter(Mandatory)][string]$Name
+    )
+
+    $full = if ($Root -eq 'HKCU:') { "HKCU:\$SubPath" } else { "$Root\$SubPath" }
+    if (Test-Path -LiteralPath $full) {
+        Remove-ItemProperty -LiteralPath $full -Name $Name -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Set-HiveDword {
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$SubPath,
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)][int]$Value
+    )
+
+    $full = if ($Root -eq 'HKCU:') { "HKCU:\$SubPath" } else { "$Root\$SubPath" }
+    if (-not (Test-Path -LiteralPath $full)) { return }
+    Set-ItemProperty -LiteralPath $full -Name $Name -Value $Value -Type DWord -Force -ErrorAction SilentlyContinue
+}
+
+function Restore-ReminderSettingsForHive {
+    param([Parameter(Mandatory)][string]$Root)
+
+    Remove-HiveValue -Root $Root -SubPath 'Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement' -Name 'ScoobeSystemSettingEnabled'
+    Remove-HiveValue -Root $Root -SubPath 'SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\AccountNotifications' -Name 'DisableAccountNotifications'
+    Remove-HiveValue -Root $Root -SubPath 'Software\Microsoft\Windows\CurrentVersion\SystemSettings\AccountNotifications' -Name 'EnableAccountNotifications'
+    Remove-HiveValue -Root $Root -SubPath 'Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'Start_AccountNotifications'
+    Remove-HiveValue -Root $Root -SubPath 'SOFTWARE\Policies\Microsoft\Windows\CloudContent' -Name 'DisableTailoredExperiencesWithDiagnosticData'
+    Remove-HiveValue -Root $Root -SubPath 'SOFTWARE\Policies\Microsoft\Windows\CloudContent' -Name 'DisableSoftLanding'
+    Remove-HiveValue -Root $Root -SubPath 'Software\Microsoft\Windows\CurrentVersion\SettingSync' -Name 'BackupReminder'
+
+    $cdmRestore = @(
+        'ContentDeliveryAllowed',
+        'RotatingLockScreenEnabled',
+        'RotatingLockScreenOverlayEnabled',
+        'SubscribedContent-310093Enabled',
+        'SubscribedContent-338387Enabled',
+        'SubscribedContent-338388Enabled',
+        'SubscribedContent-338389Enabled',
+        'SubscribedContent-338393Enabled',
+        'SubscribedContent-353694Enabled',
+        'SubscribedContent-353696Enabled',
+        'SubscribedContent-353698Enabled',
+        'SubscribedContent-88000326Enabled',
+        'SoftLandingEnabled',
+        'SystemPaneSuggestionsEnabled',
+        'SubscribedContent-310091Enabled',
+        'SubscribedContent-314563Enabled',
+        'OemPreInstalledAppsEnabled',
+        'PreInstalledAppsEnabled',
+        'PreInstalledAppsEverEnabled',
+        'SilentInstalledAppsEnabled'
+    )
+    foreach ($name in $cdmRestore) {
+        Set-HiveDword -Root $Root -SubPath 'Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager' -Name $name -Value 1
+    }
+
+    $toastNames = @(
+        'Windows.SystemToast.BackupReminder',
+        'Windows.SystemToast.Suggested',
+        'Windows.SystemToast.Account'
+    )
+    foreach ($toastName in $toastNames) {
+        Set-HiveDword -Root $Root -SubPath "Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\$toastName" -Name 'Enabled' -Value 1
+    }
+
+    $notifSub = 'Software\Microsoft\Windows\CurrentVersion\Notifications\Settings'
+    $notifFull = if ($Root -eq 'HKCU:') { "HKCU:\$notifSub" } else { "$Root\$notifSub" }
+    if (Test-Path -LiteralPath $notifFull) {
+        $pattern = 'BackupReminder|WindowsBackup|MicrosoftOfficeHub|OfficeHub|Microsoft365|OutlookForWindows|CloudExperienceHost|SystemToast\.Suggested|SystemToast\.Account|ActionsServer'
+        Get-ChildItem -LiteralPath $notifFull -ErrorAction SilentlyContinue | Where-Object {
+            $_.PSChildName -match $pattern
+        } | ForEach-Object {
+            Set-ItemProperty -LiteralPath $_.PSPath -Name 'Enabled' -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+function Invoke-DefaultUserHive {
+    param([Parameter(Mandatory)][scriptblock]$Action)
+
+    $dat = Join-Path $env:SystemDrive 'Users\Default\NTUSER.DAT'
+    if (-not (Test-Path -LiteralPath $dat)) { return }
+
+    $mountName = 'WMDefaultUser'
+    $loaded = $false
+    try {
+        & reg.exe unload "HKU\$mountName" 2>$null | Out-Null
+        & reg.exe load "HKU\$mountName" $dat | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            $loaded = $true
+            & $Action "Registry::HKEY_USERS\$mountName"
+        }
+    } catch {
+        Write-RevertStatus "Default user hive skipped: $($_.Exception.Message)"
+    } finally {
+        if ($loaded) {
+            [gc]::Collect()
+            [gc]::WaitForPendingFinalizers()
+            & reg.exe unload "HKU\$mountName" | Out-Null
+        }
+    }
+}
+
 function Enable-MicrosoftAccountNags {
     Invoke-RevertStep {
         # Re-allow Microsoft accounts (removes the block; users can still choose local)
@@ -46,76 +170,27 @@ function Enable-MicrosoftAccountNags {
     } 'Microsoft account policy blocks'
 
     Invoke-RevertStep {
-        # Re-enable Scoobe / "finish setting up" engagement
-        $engagementPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement'
-        if (Test-Path $engagementPath) {
-            try { Remove-ItemProperty -Path $engagementPath -Name 'ScoobeSystemSettingEnabled' -Force -ErrorAction SilentlyContinue } catch {}
+        foreach ($hive in (Get-TargetUserHives)) {
+            Restore-ReminderSettingsForHive -Root $hive
         }
 
-        # Re-enable account-related notifications / badges in Start & Settings
-        $advExplorerPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
-        if (Test-Path $advExplorerPath) {
-            try { Remove-ItemProperty -Path $advExplorerPath -Name 'Start_AccountNotifications' -Force -ErrorAction SilentlyContinue } catch {}
+        Invoke-DefaultUserHive -Action {
+            param($root)
+            Restore-ReminderSettingsForHive -Root $root
         }
 
-        # Re-enable Windows consumer features / tailored experiences / backup-style nags
         $cloudMachine = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent'
         if (Test-Path $cloudMachine) {
-            try { Remove-ItemProperty -Path $cloudMachine -Name 'DisableWindowsConsumerFeatures' -Force -ErrorAction SilentlyContinue } catch {}
-        }
-        $cloudUser = 'HKCU:\SOFTWARE\Policies\Microsoft\Windows\CloudContent'
-        if (Test-Path $cloudUser) {
-            try { Remove-ItemProperty -Path $cloudUser -Name 'DisableTailoredExperiencesWithDiagnosticData' -Force -ErrorAction SilentlyContinue } catch {}
-        }
-
-        # Re-enable many ContentDelivery suggestion/offer surfaces (reverses the suppression)
-        $cdmPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'
-        if (Test-Path $cdmPath) {
-            $cdmRestore = @(
-                'RotatingLockScreenEnabled',
-                'RotatingLockScreenOverlayEnabled',
-                'SubscribedContent-338387Enabled',
-                'SubscribedContent-338388Enabled',
-                'SubscribedContent-338389Enabled',
-                'SubscribedContent-338393Enabled',
-                'SubscribedContent-353694Enabled',
-                'SubscribedContent-353696Enabled',
-                'SubscribedContent-353698Enabled',
-                'SoftLandingEnabled',
-                'SystemPaneSuggestionsEnabled',
-                'SubscribedContent-310091Enabled',
-                'SubscribedContent-314563Enabled',
-                'ContentDeliveryAllowed',
-                'OemPreInstalledAppsEnabled',
-                'PreInstalledAppsEnabled',
-                'PreInstalledAppsEverEnabled',
-                'SilentInstalledAppsEnabled'
-            )
-            foreach ($name in $cdmRestore) {
-                try { Set-ItemProperty -Path $cdmPath -Name $name -Value 1 -Force -ErrorAction SilentlyContinue } catch {}
+            foreach ($name in @('DisableWindowsConsumerFeatures', 'DisableSoftLanding', 'DisableCloudOptimizedContent', 'DisableConsumerAccountStateContent')) {
+                try { Remove-ItemProperty -Path $cloudMachine -Name $name -Force -ErrorAction SilentlyContinue } catch {}
             }
         }
 
-        # Re-enable backup reminder surfaces
-        $backupReminder = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\SettingSync'
-        if (Test-Path $backupReminder) {
-            try { Remove-ItemProperty -Path $backupReminder -Name 'BackupReminder' -Force -ErrorAction SilentlyContinue } catch {}
+        $windowsBackup = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsBackup'
+        if (Test-Path $windowsBackup) {
+            try { Remove-ItemProperty -Path $windowsBackup -Name 'DisableMonitoring' -Force -ErrorAction SilentlyContinue } catch {}
         }
-
-        # Re-enable suggested / account toasts
-        $notifSettings = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings'
-        if (Test-Path $notifSettings) {
-            $suggestedPaths = @(
-                "$notifSettings\Windows.SystemToast.Suggested",
-                "$notifSettings\Windows.SystemToast.Account"
-            )
-            foreach ($p in $suggestedPaths) {
-                if (Test-Path $p) {
-                    try { Remove-ItemProperty -Path $p -Name 'Enabled' -Force -ErrorAction SilentlyContinue } catch {}
-                }
-            }
-        }
-    } 'Account nags, backup prompts, banners, and notification badging'
+    } 'Account, Windows Backup, and Microsoft 365 reminders'
 }
 
 try {
@@ -128,7 +203,7 @@ try {
     if (-not $AutomatedMode) {
         Add-Type -AssemblyName System.Windows.Forms
         [System.Windows.Forms.MessageBox]::Show(
-            'Microsoft account prompts and online nags have been re-enabled (stock behavior restored for local + potential MS accounts).`n`nSome banners require sign-out or restart to reappear.',
+            'Microsoft account prompts and online nags have been re-enabled (stock behaviour restored for local + potential MS accounts).`n`nSome banners require sign-out or restart to reappear.',
             'Revert MS Account Prompts',
             'OK',
             'Information'

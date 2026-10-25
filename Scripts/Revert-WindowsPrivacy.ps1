@@ -2,7 +2,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # Revert script for WindowsPrivacy.ps1
-# Restores many default Windows 11 telemetry, advertising, background app, search, and suggestion behaviors.
+# Restores many default Windows 11 telemetry, advertising, background app, search, and suggestion behaviours.
 # Note: Some core diagnostic data cannot be fully disabled by Microsoft policy even after this.
 
 $AutomatedMode = $args -contains '--automated'
@@ -45,7 +45,7 @@ function Enable-AdvertisingAndTelemetry {
         $advUser = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo'
         if (Test-Path $advUser) { Set-ItemProperty -Path $advUser -Name 'Enabled' -Value 1 -Force -EA SilentlyContinue }
 
-        # Telemetry back toward defaults (Required = 1 on many builds; Optional = 3 where allowed)
+        # Telemetry back towards defaults (Required = 1 on many builds; Optional = 3 where allowed)
         $dcPaths = @('HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection', 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection')
         foreach ($p in $dcPaths) {
             if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }
@@ -135,7 +135,7 @@ function Revert-CorePrivacyPolicies {
             try { Remove-ItemProperty -Path $cloudU -Name 'DisableTailoredExperiencesWithDiagnosticData' -Force -EA SilentlyContinue } catch {}
         }
 
-        # Delivery Optimization back to default (1 = LAN + internet group, or let Windows decide)
+        # Delivery Optimisation back to default (1 = LAN + internet group, or let Windows decide)
         $do = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization'
         if (Test-Path $do) {
             try { Set-ItemProperty -Path $do -Name 'DODownloadMode' -Value 1 -Force -EA SilentlyContinue } catch {}
@@ -169,7 +169,7 @@ function Revert-CorePrivacyPolicies {
             try { Remove-ItemProperty -Path $exp -Name 'ShowSyncProviderNotifications' -Force -EA SilentlyContinue } catch {}
         }
 
-        # CDM suggestions back toward enabled
+        # CDM suggestions back towards enabled
         $cdm = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'
         if (Test-Path $cdm) {
             $cdmOn = @('RotatingLockScreenEnabled','SubscribedContent-338387Enabled','SubscribedContent-338388Enabled','SubscribedContent-338389Enabled','SubscribedContent-353698Enabled','SoftLandingEnabled','SystemPaneSuggestionsEnabled')
@@ -207,69 +207,75 @@ function Enable-PrivacyScheduledTasks {
 
 function Remove-MicrosoftTelemetryBlocks {
     Invoke-RevertStep {
-        # Remove firewall rules we created (by our WM- prefix; safe, won't touch other rules)
         $fwRules = Get-NetFirewallRule -DisplayName 'WM-BlockTelemetry-*' -ErrorAction SilentlyContinue
         if ($fwRules) {
             $fwRules | Remove-NetFirewallRule -Confirm:$false -ErrorAction SilentlyContinue
             Write-RevertStatus "  Removed $($fwRules.Count) WM-BlockTelemetry firewall rule(s)."
         }
 
-        # Clean only our marked section from hosts file (leave any user or other custom entries intact)
-        $hostsPath = Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'
-        if (Test-Path $hostsPath) {
-            $markerStart = '# >>> WindowsMaintenance-Telemetry-Block START'
-            $markerEnd   = '# >>> WindowsMaintenance-Telemetry-Block END'
-            $lines = Get-Content -Path $hostsPath -ErrorAction SilentlyContinue
-            $restored = @()
-            $skip = $false
-            foreach ($line in $lines) {
-                $t = $line.Trim()
-                if ($t -eq $markerStart) { $skip = $true; continue }
-                if ($t -eq $markerEnd)   { $skip = $false; continue }
-                if (-not $skip) { $restored += $line }
+        $nrptComment = 'WindowsMaintenance telemetry block'
+        try {
+            $existingRules = @(Get-DnsClientNrptRule -ErrorAction SilentlyContinue)
+        } catch {
+            $existingRules = @()
+        }
+        $removedNrpt = 0
+        foreach ($rule in $existingRules) {
+            $comment = ''
+            $displayName = ''
+            if ($rule.PSObject.Properties.Match('Comment').Count -gt 0 -and $rule.Comment) {
+                $comment = [string]$rule.Comment
             }
-            Set-Content -Path $hostsPath -Value ($restored -join [Environment]::NewLine) -Force -Encoding ASCII -ErrorAction SilentlyContinue
-            Write-RevertStatus '  Cleaned WindowsMaintenance telemetry block section from hosts file (if present).'
+            if ($rule.PSObject.Properties.Match('DisplayName').Count -gt 0 -and $rule.DisplayName) {
+                $displayName = [string]$rule.DisplayName
+            }
+            if ($comment -eq $nrptComment -or $displayName -like 'WM-Telemetry-*') {
+                try {
+                    Remove-DnsClientNrptRule -Name $rule.Name -Force -ErrorAction Stop
+                    $removedNrpt++
+                } catch {
+                    Write-RevertStatus "  NRPT rule removal skipped: $($_.Exception.Message)"
+                }
+            }
         }
-    } 'Microsoft telemetry/feedback hosts + firewall blocks'
-}
-
-function Revert-WindowsAI {
-    # This is mostly a re-enable of Copilot / AI surfaces (user can still disable in Settings)
-    Invoke-RevertStep {
-        $expAdv = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
-        if (Test-Path $expAdv) {
-            try { Remove-ItemProperty -Path $expAdv -Name 'ShowCopilotButton' -Force -EA SilentlyContinue } catch {}
-            try { Remove-ItemProperty -Path $expAdv -Name 'DisabledHotkeys' -Force -EA SilentlyContinue } catch {}
-        }
-
-        $searchSet = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\SearchSettings'
-        if (Test-Path $searchSet) {
-            try { Remove-ItemProperty -Path $searchSet -Name 'IsCopilotEnabled' -Force -EA SilentlyContinue } catch {}
-            try { Remove-ItemProperty -Path $searchSet -Name 'IsCopilotAvailable' -Force -EA SilentlyContinue } catch {}
+        if ($removedNrpt -gt 0) {
+            Write-RevertStatus "  Removed $removedNrpt telemetry NRPT rule(s)."
+            try { Clear-DnsClientCache -ErrorAction SilentlyContinue } catch {}
         }
 
-        $copilot = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot'
-        if (Test-Path $copilot) {
-            try { Remove-ItemProperty -Path $copilot -Name 'TurnOffWindowsCopilot' -Force -EA SilentlyContinue } catch {}
+        # Only rewrite hosts when an older run left our marked block behind.
+        $hostsPath = Join-Path $env:SystemRoot 'System32\drivers\etc\hosts'
+        if (Test-Path -LiteralPath $hostsPath) {
+            $markerStart = '# >>> WindowsMaintenance-Telemetry-Block START'
+            $markerEnd = '# >>> WindowsMaintenance-Telemetry-Block END'
+            $lines = @(Get-Content -LiteralPath $hostsPath -ErrorAction SilentlyContinue)
+            $found = $false
+            foreach ($line in $lines) {
+                if ($null -ne $line -and $line.Trim() -eq $markerStart) { $found = $true; break }
+            }
+            if ($found) {
+                $restored = New-Object System.Collections.Generic.List[string]
+                $skip = $false
+                foreach ($line in $lines) {
+                    if ($null -eq $line) { continue }
+                    $t = $line.Trim()
+                    if ($t -eq $markerStart) { $skip = $true; continue }
+                    if ($t -eq $markerEnd) { $skip = $false; continue }
+                    if (-not $skip) { [void]$restored.Add($line) }
+                }
+                if ($restored.Count -eq 0) {
+                    Set-Content -LiteralPath $hostsPath -Value '' -Force -Encoding ASCII
+                } else {
+                    Set-Content -LiteralPath $hostsPath -Value $restored.ToArray() -Force -Encoding ASCII
+                }
+                Write-RevertStatus '  Removed the older WindowsMaintenance block from the hosts file.'
+            }
         }
-        $copilotU = 'HKCU:\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot'
-        if (Test-Path $copilotU) {
-            try { Remove-ItemProperty -Path $copilotU -Name 'TurnOffWindowsCopilot' -Force -EA SilentlyContinue } catch {}
-        }
-
-        $winAI = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsAI'
-        if (Test-Path $winAI) {
-            try { Remove-ItemProperty -Path $winAI -Name 'DisableAIDataAnalysis' -Force -EA SilentlyContinue } catch {}
-            try { Remove-ItemProperty -Path $winAI -Name 'DisableSettingsAgent' -Force -EA SilentlyContinue } catch {}
-        }
-
-        Write-RevertStatus 'AI / Copilot policies largely removed (features may re-appear; user Settings still control final state).'
-    } 'Windows AI / Copilot disablement'
+    } 'Microsoft telemetry and feedback NRPT, firewall, and legacy hosts block'
 }
 
 function Invoke-RevertWindowsPrivacy {
-    Write-RevertStatus 'Starting Windows privacy / telemetry / ads reversal (restoring more default behavior)...'
+    Write-RevertStatus 'Starting Windows privacy / telemetry / ads reversal (restoring more default behaviour)...'
 
     Enable-PrivacyServices
     Enable-AdvertisingAndTelemetry
@@ -278,10 +284,7 @@ function Invoke-RevertWindowsPrivacy {
     Enable-PrivacyScheduledTasks
     Remove-MicrosoftTelemetryBlocks
 
-    # Note: We do not auto re-enable full AI here unless specifically requested in the caller.
-    # If the original run used --disable-ai, the revert planner task can call this explicitly.
-
-    Write-RevertStatus 'Privacy reversal completed. Many telemetry, ad, and suggestion surfaces are now closer to Windows defaults.'
+    Write-RevertStatus 'Privacy reversal completed. Many telemetry, ad, and suggestion surfaces are now closer to Windows defaults. Windows AI is a separate task.'
 }
 
 try {
