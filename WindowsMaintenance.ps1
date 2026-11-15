@@ -3,6 +3,19 @@ Set-ExecutionPolicy Bypass -Force
 Clear-Host
 #Windows Cleaner Launcher of my other PS1 scripts to create a large form of options
 
+If ($CurrentWindowsPrincipal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator))
+{
+    Write-Output "Starting Script"
+    #Ignore
+}
+Else { 
+    Write-Warning "Insufficient permissions to run this script. Open the PowerShell console as an administrator and run this script again."
+    [System.Windows.MessageBox]::Show('Insufficient permissions to run this script. Open the PowerShell console as an administrator and run this script again.','Windows Maintenance','Ok','Information')
+    Write-Output "Auto-closing in 10 seconds"
+    Timeout 10 
+Exit
+}
+
 #Type Loader
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName PresentationFramework
@@ -54,8 +67,8 @@ function DISMCompleted () {
     #Scriptname = {filename+path/command}
     $WindowsInstallCleanup = {.\Scripts\Windows10InstallCleaner.ps1}
     $WindowsUninstallOneDrive = {.\Scripts\Uninstallonedrive.ps1}
-    $WindowsDiskCleanup = {cleanmgr /tuneup:1 | ExecutionCompleted}
-    $Usercleanup = {.\Scripts\UserCleaner.ps1}
+    # Rename from UserCleaner to "Cleaner"
+    $Windowscleaner = {.\Scripts\WindowsCleaner.ps1}
     $Defrag = {.\Scripts\windowsdefrag.ps1}
     $DiskCheck = {.\Scripts\windowsrepairvolume.ps1}
     $ReinstallApps = {Get-AppXPackage -AllUsers | ForEach-Object {Add-AppxPackage -DisableDevelopmentMode -Register "$($_.InstallLocation)\AppXManifest.xml"} | ExecutionCompleted}
@@ -97,24 +110,18 @@ function DISMCompleted () {
     $OneDriveUninstallbutton.Size = New-Object System.Drawing.Size(120,23)
     $OneDriveUninstallbutton.Text = "Uninstall OneDrive"
     $OneDriveUninstallbutton.Add_Click($WindowsUninstallOneDrive)
-#Disk Cleanup Utility Button
-    $Diskcleanupbutton = New-Object System.Windows.Forms.Button
-    $Diskcleanupbutton.Location = New-Object System.Drawing.Size(35,95)
-    $Diskcleanupbutton.Size = New-Object System.Drawing.Size(120,23)
-    $Diskcleanupbutton.Text = "Disk Cleanup Silent"
-    $Diskcleanupbutton.Add_Click($WindowsDiskCleanup)
 #Delprof Cleanup Button
     $Delprofbutton = New-Object System.Windows.Forms.Button
     $Delprofbutton.Location = New-Object System.Drawing.Size(165,65)
     $Delprofbutton.Size = New-Object System.Drawing.Size(130,23)
     $Delprofbutton.Text = "Delete All user profiles"
     $Delprofbutton.Add_Click($DelProf)
-#User Cleanup Utility
-    $usercleanupbutton = New-Object System.Windows.Forms.Button
-    $usercleanupbutton.Location = New-Object System.Drawing.Size(35,125)
-    $usercleanupbutton.Size = New-Object System.Drawing.Size(120,23)
-    $usercleanupbutton.Text = "User Cleanup"
-    $usercleanupbutton.Add_Click($Usercleanup)
+#Windows Cleaner Utility
+    $Windowscleanerbutton = New-Object System.Windows.Forms.Button
+    $Windowscleanerbutton.Location = New-Object System.Drawing.Size(35,125)
+    $Windowscleanerbutton.Size = New-Object System.Drawing.Size(120,23)
+    $Windowscleanerbutton.Text = "Windows Cleaner"
+    $Windowscleanerbutton.Add_Click($Windowscleaner)
 #DISM Restore
     $Restorehealthbutton = New-Object System.Windows.Forms.Button
     $Restorehealthbutton.Location = New-Object System.Drawing.Size(165,95)
@@ -170,9 +177,8 @@ function DISMCompleted () {
     $Form.Controls.Add($Cleanupinstallbutton)
     $Form.Controls.Add($OneDriveUninstallbutton)
     $Form.Controls.Add($ReinstallDefaultAppsbutton)
-    $Form.Controls.Add($Diskcleanupbutton)
     $Form.Controls.Add($Delprofbutton)
-    $Form.Controls.Add($usercleanupbutton)
+    $Form.Controls.Add($Windowscleanerbutton)
     $Form.Controls.Add($Restorehealthbutton)
     $Form.Controls.Add($Defragbutton)
     $Form.Controls.Add($DiskCheckbutton)

@@ -89,6 +89,8 @@ function DisableBackgroundAccess () {Set-ItemProperty -Path "HKCU:\Software\Micr
     $DisableServices = {DisableDataUsage | DisableFax | DisableParentalControls | DisableGeoLocation | DisableNFCPayments | DisableRetailDemo | DisableWindowsInside | DisableMapsManager |ExecutionCompleted}
     #Disable Telemetry, this stops information being sent to Microsoft, can help with keeping internet usage down
     $DisableTelemetry = {DisableDiagtrack | DisableDiagtrack2 | DisableAdvertisingID | DisableTelemetry | ExecutionCompleted}
+    #Do all above
+    $DoallAbove = {VisualFXSetting | MinAnimate | TaskbarAnimations | TaskbarAnimations2 | CompositionPolicy | ColorizationOpaqueBlend | AlwaysHibernateThumbnails | DisableThumbnails | ListviewAlphaSelect | DragFullWindows | FontSmoothing | ThemeManager | ThemeManager2 | UserPreferencesMask | RestartThemeService | ExecutionCompleted | DisableBackgroundAccess | DisableBackgroundApps | ExecutionCompleted | DisableDataUsage | DisableFax | DisableParentalControls | DisableGeoLocation | DisableNFCPayments | DisableRetailDemo | DisableWindowsInside | DisableMapsManager | ExecutionCompleted | DisableDiagtrack | DisableDiagtrack2 | DisableAdvertisingID | DisableTelemetry | ExecutionCompleted}
 
 #Form GUI for loading
  #Create Form to show selection of cleanup
@@ -127,6 +129,12 @@ function DisableBackgroundAccess () {Set-ItemProperty -Path "HKCU:\Software\Micr
  $DisableTelemetrybutton.Size = New-Object System.Drawing.Size(130,23)
  $DisableTelemetrybutton.Text = "Disable Telemetry"
  $DisableTelemetrybutton.Add_Click($DisableTelemetry)
+#Do All Above
+ $DoallAbovebutton = New-Object System.Windows.Forms.Button
+ $DoallAbovebutton.Location = New-Object System.Drawing.Size(35,95)
+ $DoallAbovebutton.Size = New-Object System.Drawing.Size(120,23)
+ $DoallAbovebutton.Text = "Do All"
+ $DoallAbovebutton.Add_Click($DoallAbove)
 #Custom Changes
  #$Customchangesbutton = New-Object System.Windows.Forms.Button
  #$Customchangesbutton.Location = New-Object System.Drawing.Size(165,155)
@@ -147,6 +155,7 @@ function DisableBackgroundAccess () {Set-ItemProperty -Path "HKCU:\Software\Micr
  $Form.Controls.Add($TurnoffbackgroundappsButton)
  $Form.Controls.Add($DisableServicesbutton)
  $Form.Controls.Add($DisableTelemetrybutton)
+ $Form.Controls.Add($DoallAbovebutton)
  #$Form.Controls.Add($Customchangesbutton)
 #Null command to stop console spam
 $Form.ShowDialog() > $null
