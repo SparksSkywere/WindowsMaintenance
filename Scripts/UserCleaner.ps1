@@ -1,5 +1,8 @@
 Clear-Host
 #A real basic script going to locations and then deleting, then going to the next in the line and deleting
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
 function Show-Console
 {
     param ([Switch]$Show,[Switch]$Hide)
@@ -30,17 +33,14 @@ function Show-Console
 show-console -hide
 
 #Functions
-function ExecutionCompleted () {
-    [System.Windows.MessageBox]::Show('Operation Completed','Windows Maintenance','Ok','Information')
-}
 
 #Cleanup commands and locations
-$Cleanup_CTemp = {Get-ChildItem -Path 'C:\Windows\Temp' * -Recurse | Remove-Item | ExecutionCompleted}
-$Cleanup_Prefetch = {Get-ChildItem -Path 'C:\Windows\Prefetch' * -Recurse | Remove-Item | ExecutionCompleted}
-$Cleanup_DSLocal = {Get-ChildItem -Path 'C:\Documents and Settings\*\Local Settings\temp\' * -Recurse | Remove-Item | ExecutionCompleted}
-$Cleanup_Appdata = {Get-ChildItem -Path 'C:\Users\*\Appdata\Local\Temp\' * -Recurse | Remove-Item | ExecutionCompleted}
-$CleanupSystem = {CleanupSystem | ExecutionCompleted}
-$DoAll = {Get-ChildItem -Path 'C:\Windows\Temp' * -Recurse | Remove-Item | Get-ChildItem -Path 'C:\Windows\Prefetch' * -Recurse | Remove-Item | Get-ChildItem -Path 'C:\Documents and Settings\*\Local Settings\temp\' * -Recurse | Remove-Item | Get-ChildItem -Path 'C:\Users\*\Appdata\Local\Temp\' * -Recurse | Remove-Item | CleanupSystem |ExecutionCompleted}
+$Cleanup_CTemp = {Get-ChildItem -Path 'C:\Windows\Temp' * -Recurse | Remove-Item}
+$Cleanup_Prefetch = {Get-ChildItem -Path 'C:\Windows\Prefetch' * -Recurse | Remove-Item}
+$Cleanup_DSLocal = {Get-ChildItem -Path 'C:\Documents and Settings\*\Local Settings\temp\' * -Recurse | Remove-Item}
+$Cleanup_Appdata = {Get-ChildItem -Path 'C:\Users\*\Appdata\Local\Temp\' * -Recurse | Remove-Item}
+$CleanupSystem = {CleanupSystem}
+$DoAll = {Get-ChildItem -Path 'C:\Windows\Temp' * -Recurse | Remove-Item; Get-ChildItem -Path 'C:\Windows\Prefetch' * -Recurse | Remove-Item; Get-ChildItem -Path 'C:\Documents and Settings\*\Local Settings\temp\' * -Recurse | Remove-Item; Get-ChildItem -Path 'C:\Users\*\Appdata\Local\Temp\' * -Recurse | Remove-Item; CleanupSystem}
 
 function CleanupSystem () {
 # Declare variables for the folders we want to clean up
@@ -79,8 +79,12 @@ $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Windows User Cleanup'
 $form.StartPosition = 'CenterScreen'
 $form.Size = New-Object System.Drawing.Size(310,350)
-$objIcon = New-Object system.drawing.icon (".\Assets\windowslogo.ico")
-$form.Icon = $objIcon
+$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+$parentRoot = Split-Path -Parent $scriptRoot
+$iconPath = Join-Path $parentRoot 'Assets\windowslogo.ico'
+if (Test-Path $iconPath) {
+    $form.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon($iconPath)
+}
 
     $CleanupCbutton = New-Object System.Windows.Forms.Button
     $CleanupCbutton.Location = New-Object System.Drawing.Size(25,15)
