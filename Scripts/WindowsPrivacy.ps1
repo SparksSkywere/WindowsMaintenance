@@ -191,7 +191,8 @@ function Set-CorePrivacyPolicies {
         $appPrivacyPath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy'
         if (-not (Test-Path $appPrivacyPath)) { New-Item -Path $appPrivacyPath -Force | Out-Null }
         Set-ItemProperty -Path $appPrivacyPath -Name 'LetAppsGetDiagnosticInfo' -Value 2 -Force
-        Set-ItemProperty -Path $appPrivacyPath -Name 'LetAppsAccessAccountInfo' -Value 2 -Force
+        # Never force-deny account info: Settings needs it to change the local profile picture / Your info.
+        Remove-ItemProperty -Path $appPrivacyPath -Name 'LetAppsAccessAccountInfo' -Force -ErrorAction SilentlyContinue
         Set-ItemProperty -Path $appPrivacyPath -Name 'LetAppsAccessCalendar' -Value 2 -Force
         Set-ItemProperty -Path $appPrivacyPath -Name 'LetAppsAccessCallHistory' -Value 2 -Force
         Set-ItemProperty -Path $appPrivacyPath -Name 'LetAppsAccessContacts' -Value 2 -Force
@@ -212,10 +213,15 @@ function Set-CorePrivacyPolicies {
         $cloudContentMachinePath = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent'
         if (-not (Test-Path $cloudContentMachinePath)) { New-Item -Path $cloudContentMachinePath -Force | Out-Null }
         Set-ItemProperty -Path $cloudContentMachinePath -Name 'DisableWindowsConsumerFeatures' -Value 1 -Force
+        Set-ItemProperty -Path $cloudContentMachinePath -Name 'DisableSoftLanding' -Value 1 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cloudContentMachinePath -Name 'DisableCloudOptimizedContent' -Value 1 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cloudContentMachinePath -Name 'DisableConsumerAccountStateContent' -Value 1 -Force -ErrorAction SilentlyContinue
 
         $cloudContentUserPath = 'HKCU:\SOFTWARE\Policies\Microsoft\Windows\CloudContent'
         if (-not (Test-Path $cloudContentUserPath)) { New-Item -Path $cloudContentUserPath -Force | Out-Null }
         Set-ItemProperty -Path $cloudContentUserPath -Name 'DisableTailoredExperiencesWithDiagnosticData' -Value 1 -Force
+        Set-ItemProperty -Path $cloudContentUserPath -Name 'DisableWindowsSpotlightFeatures' -Value 1 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cloudContentUserPath -Name 'DisableSpotlightCollectionOnDesktop' -Value 1 -Force -ErrorAction SilentlyContinue
 
         Set-ItemProperty -Path $systemPolicyPath -Name 'EnableAppUriHandlers' -Value 0 -Force -ErrorAction SilentlyContinue
         Set-ItemProperty -Path $systemPolicyPath -Name 'AllowCrossDeviceClipboard' -Value 0 -Force -ErrorAction SilentlyContinue
@@ -244,8 +250,26 @@ function Set-CorePrivacyPolicies {
         if (-not (Test-Path $explorerAdvancedPath)) { New-Item -Path $explorerAdvancedPath -Force | Out-Null }
         Set-ItemProperty -Path $explorerAdvancedPath -Name 'TaskbarDa' -Value 0 -Force -ErrorAction SilentlyContinue
         Set-ItemProperty -Path $explorerAdvancedPath -Name 'Start_TrackDocs' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $explorerAdvancedPath -Name 'Start_IrisRecommendations' -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $explorerAdvancedPath -Name 'Start_AccountNotifications' -Value 0 -Force -ErrorAction SilentlyContinue
         # Disable File Explorer "sync provider" ads / OneDrive / Microsoft 365 upsells (common W11 privacy annoyance)
         Set-ItemProperty -Path $explorerAdvancedPath -Name 'ShowSyncProviderNotifications' -Value 0 -Force -ErrorAction SilentlyContinue
+
+        # Stop Start feed provider / Widgets / Cross-device resume that stay resident after Close
+        $bgRoot = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\BackgroundAccessApplications'
+        if (-not (Test-Path $bgRoot)) { New-Item -Path $bgRoot -Force | Out-Null }
+        foreach ($pkgName in @('Microsoft.StartExperiencesApp', 'MicrosoftWindows.Client.WebExperience', 'MicrosoftWindows.CrossDevice')) {
+            foreach ($pkg in @(Get-AppxPackage -Name $pkgName -ErrorAction SilentlyContinue)) {
+                if (-not $pkg) { continue }
+                $appPath = Join-Path $bgRoot $pkg.PackageFullName
+                if (-not (Test-Path $appPath)) { New-Item -Path $appPath -Force | Out-Null }
+                Set-ItemProperty -Path $appPath -Name 'BackgroundAccess' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+                Set-ItemProperty -Path $appPath -Name 'Disabled' -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+            }
+        }
+        foreach ($procName in @('Widgets', 'WidgetBoard', 'WidgetService', 'MicrosoftStartFeedProvider', 'CrossDeviceResume')) {
+            Stop-Process -Name $procName -Force -ErrorAction SilentlyContinue
+        }
 
         $cdmPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'
         if (-not (Test-Path $cdmPath)) { New-Item -Path $cdmPath -Force | Out-Null }
@@ -321,7 +345,8 @@ function Disable-PrivacyScheduledTasks {
             '\Microsoft\Windows\Customer Experience Improvement Program\KernelCeipTask',
             '\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip',
             '\Microsoft\Windows\Feedback\Siuf\DmClient',
-            '\Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload'
+            '\Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload',
+            '\Microsoft\Windows\PerformanceTrace\ShowFeedbackToast'
         )
 
         foreach ($taskPath in $tasks) {

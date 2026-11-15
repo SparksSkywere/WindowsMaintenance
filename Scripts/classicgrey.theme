@@ -1,0 +1,54 @@
+; Copyright © WindowsMaintenance
+; Classic Windows 95/98-style grey colour scheme for performance-oriented old-school mode.
+; Visual styles are turned off by the apply script (ThemeActive=0) so common controls go grey/classic.
+
+[Theme]
+DisplayName=Classic Grey
+SetLogonBackground=0
+
+[Control Panel\Colors]
+ActiveBorder=192 192 192
+ActiveTitle=0 0 128
+AppWorkspace=128 128 128
+Background=0 128 128
+ButtonAlternateFace=181 181 181
+ButtonDkShadow=0 0 0
+ButtonFace=192 192 192
+ButtonHilight=255 255 255
+ButtonLight=192 192 192
+ButtonShadow=128 128 128
+ButtonText=0 0 0
+GradientActiveTitle=0 0 128
+GradientInactiveTitle=128 128 128
+GrayText=128 128 128
+Hilight=0 0 128
+HilightText=255 255 255
+HotTrackingColor=0 0 128
+InactiveBorder=192 192 192
+InactiveTitle=128 128 128
+InactiveTitleText=192 192 192
+InfoText=0 0 0
+InfoWindow=255 255 225
+Menu=192 192 192
+MenuBar=192 192 192
+MenuHilight=0 0 128
+MenuText=0 0 0
+Scrollbar=192 192 192
+TitleText=255 255 255
+Window=255 255 255
+WindowFrame=0 0 0
+WindowText=0 0 0
+
+[Control Panel\Desktop]
+TileWallpaper=0
+WallpaperStyle=2
+Pattern=
+
+[boot]
+SCRNSAVE.EXE=
+
+[MasterThemeSelector]
+MTSM=RJSPBS
+
+[Sounds]
+SchemeName=@%SystemRoot%\System32\mmres.dll,-800

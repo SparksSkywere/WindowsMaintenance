@@ -26,24 +26,49 @@ function Invoke-MSOnlineStep {
     }
 }
 
+function Repair-AccountPersonalizationPolicies {
+    # Older builds of this script set AllowYourAccount / AllowSignInOptions to 0.
+    # That locks Settings > Accounts > Your info (account picture / profile icons) for local users.
+    # Keep those pages usable while still suppressing Microsoft-account nags below.
+    $pmDevicePath = 'HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device\Settings'
+    if (Test-Path $pmDevicePath) {
+        Remove-ItemProperty -Path $pmDevicePath -Name 'AllowYourAccount' -Force -ErrorAction SilentlyContinue
+        Remove-ItemProperty -Path $pmDevicePath -Name 'AllowSignInOptions' -Force -ErrorAction SilentlyContinue
+    }
+
+    foreach ($name in @('AllowYourAccount', 'AllowSignInOptions')) {
+        $defaultPath = "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\Settings\$name"
+        if (Test-Path $defaultPath) {
+            # Schema key: restore default allowed (1). Do not delete Value.
+            Set-ItemProperty -Path $defaultPath -Name 'Value' -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    # Never force the default account tile for all users.
+    $explorerPolicy = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer'
+    if (Test-Path $explorerPolicy) {
+        Remove-ItemProperty -Path $explorerPolicy -Name 'UseDefaultTile' -Force -ErrorAction SilentlyContinue
+        Remove-ItemProperty -Path $explorerPolicy -Name 'NoChangingAccountPicture' -Force -ErrorAction SilentlyContinue
+    }
+
+    # Older privacy/optimisation passes force-denied LetAppsAccessAccountInfo (value 2).
+    # That also blocks changing the local account picture in Settings.
+    $appPrivacy = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy'
+    if (Test-Path $appPrivacy) {
+        Remove-ItemProperty -Path $appPrivacy -Name 'LetAppsAccessAccountInfo' -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Disable-MicrosoftAccountPolicies {
     Invoke-MSOnlineStep {
-        # Block new Microsoft account sign-ins / additions (helps hide sign-in tabs and some forced prompts)
+        Repair-AccountPersonalizationPolicies
+
+        # Block new Microsoft account additions. Does not lock local-profile picture / Your info pages.
+        # 1 = Users can't add Microsoft accounts; 3 = Don't allow Microsoft accounts at all.
         $sysPath = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
         if (-not (Test-Path $sysPath)) { New-Item -Path $sysPath -Force | Out-Null }
-        Set-ItemProperty -Path $sysPath -Name 'NoConnectedUser' -Value 1 -Force
-
-        # PolicyManager device settings to suppress account integration prompts (common on 24H2+)
-        $pmDevicePath = 'HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device\Settings'
-        if (-not (Test-Path $pmDevicePath)) { New-Item -Path $pmDevicePath -Force | Out-Null }
-        Set-ItemProperty -Path $pmDevicePath -Name 'AllowYourAccount' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
-        Set-ItemProperty -Path $pmDevicePath -Name 'AllowSignInOptions' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
-
-        # Default/Settings policy location sometimes used
-        $pmDefaultPath = 'HKLM:\SOFTWARE\Microsoft\PolicyManager\default\Settings\AllowYourAccount'
-        if (-not (Test-Path $pmDefaultPath)) { New-Item -Path $pmDefaultPath -Force | Out-Null }
-        Set-ItemProperty -Path $pmDefaultPath -Name 'Value' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
-    } 'Microsoft account policy blocks (NoConnectedUser + PolicyManager)'
+        Set-ItemProperty -Path $sysPath -Name 'NoConnectedUser' -Value 1 -Type DWord -Force
+    } 'Microsoft account add-block (NoConnectedUser) without locking local profile icons'
 }
 
 function Get-TargetUserHives {
@@ -199,6 +224,7 @@ function Invoke-DisableMSOnline {
     Disable-AccountNagsAndBackupPrompts
 
     Write-MSOnlineStatus 'Microsoft Account online prompts and nags have been suppressed.'
+    Write-MSOnlineStatus 'Local profile account pictures and Settings > Accounts > Your info remain changeable.'
     Write-MSOnlineStatus 'Note: Sign-out / restart recommended for Settings surfaces to refresh. You can still sign into a Microsoft account manually later.'
 }
 

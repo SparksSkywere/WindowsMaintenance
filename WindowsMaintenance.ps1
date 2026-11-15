@@ -104,11 +104,11 @@ $scriptPaths = @{
     VisualOptimisation = Join-Path $ScriptRoot "Scripts\VisualOptimisation.ps1"
     UserCleaner = Join-Path $ScriptRoot "Scripts\UserCleaner.ps1"
     DefenderFix = Join-Path $ScriptRoot "Scripts\Fix-Windows-Defender.ps1"
-    CustomChanges = Join-Path $ScriptRoot "Scripts\CustomChanges.ps1"
     AeroliteTheme = Join-Path $ScriptRoot "Scripts\aerolite.theme"
     Delprof2 = Join-Path $ScriptRoot "Scripts\Delprof2.exe"
     DisableMSOnline = Join-Path $ScriptRoot "Scripts\DisableMSOnline.ps1"
     DisableWindowsAI = Join-Path $ScriptRoot "Scripts\DisableWindowsAI.ps1"
+    FirewallPrivacy = Join-Path $ScriptRoot "Scripts\FirewallPrivacy.ps1"
 }
 
 # Individual System Optimisation actions. The main checklist lists each one.
@@ -121,11 +121,11 @@ $script:OptimisationTaskOptions = @(
     @{ Id = 'OptStorage'; Name = 'Storage and File System'; Action = 'Storage'; Weight = 8; Default = $false; Description = 'Turns off 8.3 short file names and last-access timestamps, stops Delivery Optimisation from seeding updates, removes the hibernation file, and turns off Storage Sense auto-cleanup.'; Impact = 'Frees disk space about the size of installed RAM. Fast Startup that uses hibernation stays off until revert.' }
     @{ Id = 'OptStartup'; Name = 'Startup and Boot'; Action = 'Startup'; Weight = 6; Default = $false; Description = 'Removes the delay before startup programs, sets the boot menu timeout to 5 seconds, turns off AutoPlay, and gives foreground programs scheduling priority.'; Impact = 'Sign-in programs start sooner. The boot menu stays visible for less time.' }
     @{ Id = 'OptScheduledTasks'; Name = 'Task Scheduler Cleanup'; Action = 'ScheduledTasks'; Weight = 6; Default = $false; Description = 'Disables selected compatibility, feedback, diagnostic, and telemetry scheduled tasks. Windows Update and the shell keep their own tasks.'; Impact = 'Revert enables this same task list again.' }
-    @{ Id = 'OptAdditionalServices'; Name = 'Additional Services'; Action = 'AdditionalServices'; Weight = 8; Default = $false; Description = 'Disables optional services such as Xbox Live, Connected Devices Platform, remote registry, hotspot helpers, delivery optimisation, and the push-notification user service.'; Impact = 'Toasts, Windows Hello, nearby sharing, and the mobile hotspot can stop until revert. Printing stays available.' }
+        @{ Id = 'OptAdditionalServices'; Name = 'Additional Services'; Action = 'AdditionalServices'; Weight = 8; Default = $false; Description = 'Disables leftover idle services such as Xbox Live, CDP, UPnP/SSDP, remote registry, diagnostics collectors, hotspot helpers, delivery optimisation, and push-notification user services. COM+ Event System, COM+ System Application, and DCOM Launch stay running. MSDTC is Manual. OEM usage reports are stopped when detected.'; Impact = 'Toasts, Windows Hello, nearby sharing, and the mobile hotspot can stop until revert. Printing stays available. Graphics, audio, storage, and hotkey software stays available.' }
     @{ Id = 'OptBackgroundApps'; Name = 'Disable Background Apps'; Action = 'BackgroundApps'; Weight = 6; Default = $false; Description = 'Stops Microsoft Store and inbox apps from running while they are closed.'; Impact = 'Settings, Start, and Explorer still open. A closed app may take a moment longer the next time it launches.' }
     @{ Id = 'OptServices'; Name = 'Disable Optional Services'; Action = 'Services'; Weight = 6; Default = $false; Description = 'Disables data-usage monitoring, Fax, parental controls, location, NFC payments, retail demo, Windows Insider, and Maps.'; Impact = 'Those features stay off until revert. Everyday networking and sign-in stay available.' }
     @{ Id = 'OptTelemetry'; Name = 'Disable Telemetry Services'; Action = 'Telemetry'; Weight = 6; Default = $false; Description = 'Stops Connected User Experiences and Telemetry, the device-management push service, and the advertising ID, and sets the telemetry policy to the security level.'; Impact = 'Diagnostic data sent by those services stops. Windows Privacy remains the fuller privacy task, including firewall rules.' }
-    @{ Id = 'OptUiCleanup'; Name = 'UI and Notifications'; Action = 'UICleanup'; Weight = 6; Default = $false; Description = 'Turns off transparency, lock-screen tips, Start suggestions, Widgets, and the feed board.'; Impact = 'The desktop looks quieter. The shell, Start menu, and Settings still open. Revert restores the Widgets button and suggestion policies.' }
+        @{ Id = 'OptUiCleanup'; Name = 'UI and Notifications'; Action = 'UICleanup'; Weight = 6; Default = $false; Description = 'Turns off transparency, lock-screen tips, Start suggestions, Widgets, the Start feed provider (MicrosoftStartFeedProvider), and the feed board.'; Impact = 'The desktop looks quieter. The shell, Start menu, and Settings still open. Revert restores the Widgets button and suggestion policies.' }
     @{ Id = 'OptPrivacy'; Name = 'Privacy Hardening'; Action = 'Privacy'; Weight = 8; Default = $false; Description = 'Turns off feedback prompts, tailored experiences, inking and typing personalisation, voice activation, and handwriting data sharing inside the optimisation script.'; Impact = 'Windows Privacy is still the main privacy task. Use this when you want these extra policy switches without the firewall rules.' }
 )
 
@@ -1240,8 +1240,6 @@ $Scripts = @{
 
     FixWindowsDefender = [scriptblock]::Create("Invoke-ScriptWithProgress -ScriptPath '$($scriptPaths.DefenderFix)' -DisplayName 'Fix Windows Defender'")
 
-    CustomChanges = [scriptblock]::Create("Invoke-ScriptWithProgress -ScriptPath '$($scriptPaths.CustomChanges)' -DisplayName 'Custom Changes Panel'")
-
     ApplyAeroliteTheme = [scriptblock]::Create(@"
         if (Test-Path '$($scriptPaths.AeroliteTheme)') {
             Start-Process -FilePath '$($scriptPaths.AeroliteTheme)' | Out-Null
@@ -1777,15 +1775,15 @@ function Show-TaskSelector {
         @{ Id = 'WindowsCleaner'; Name = 'System Cleaner'; Default = $true; Description = 'Cleans temp files, caches, and routine system clutter. This is low risk and usually worth leaving on.'; Impact = 'Improves free space and removes temporary junk.' }
         @{ Id = 'UserCleaner'; Name = 'User Profile Temp Cleaner'; Default = $false; Description = 'Runs the legacy user-cleaner utility for deeper user-temp locations and local profile cleanup actions.'; Impact = 'Can free extra profile space, but is more aggressive than standard cleaner routines.' }
         @{ Id = 'DelProf'; Name = 'Delete Old User Profiles'; Default = $false; Description = 'Deletes old user profiles to reclaim disk space. Keep this off on shared PCs unless you are sure the profiles are no longer needed.'; Impact = 'Useful for lab or hand-me-down machines, but not recommended on shared personal PCs.' }
-        @{ Id = 'VisualOptimisation'; Name = 'Visual Optimisation'; Default = $false; Description = 'Runs the standalone visual optimisation script. This is now separate from System Optimisation so visual changes are only applied when explicitly selected.'; Impact = 'Include only when you want animation and theme visual tuning.' }
-        @{ Id = 'SystemOptimisation'; Name = 'System Optimisation'; Default = $true; Description = 'Applies the balanced optimisation set: power plan, device power saving, memory policy, scheduled-task cleanup, additional services, and the RAM footprint. The individual steps below can be run on their own.'; Impact = 'This is the main tuning step. Deep RAM, gaming, storage, and startup stay unticked until you select them.' }
+        @{ Id = 'VisualOptimisation'; Name = 'Visual Optimisation'; Default = $false; Description = 'Reduces animations and transparency for snappier UI on Windows 10/11. Tick Old school theme underneath for classic Windows 95/98 grey controls and flat toolbars (not Vista/7 glass), with visuals cut further for performance.'; Impact = 'Include only when you want animation and theme visual tuning.' }
+        @{ Id = 'SystemOptimisation'; Name = 'System Optimisation'; Default = $true; Description = 'Applies the balanced optimisation set: power plan, device power saving, memory policy, scheduled-task cleanup, additional services, and the RAM footprint. Detected Intel, AMD, Nvidia, HP, Dell, Lenovo, Acer, and ASUS usage reports and support agents are stopped. The individual steps below can be run on their own.'; Impact = 'This is the main tuning step. Deep RAM, gaming, storage, and startup stay unticked until you select them. Graphics, audio, storage, and hotkey software stays available.' }
     ) + $script:OptimisationTaskOptions + @(
-        @{ Id = 'WindowsPrivacy'; Name = 'Windows Privacy'; Default = $true; Description = 'Runs the dedicated privacy script that applies telemetry reduction (registry + services + tasks), ad / recommendation suppression, and hard network blocks (DNS policy + outbound firewall rules) so that no feedback or diagnostic data is sent to Microsoft even at the "basic" level. It does not rewrite the hosts file.'; Impact = 'Primary privacy baseline for all presets. Also reduces unwanted Microsoft network traffic.' }
-        @{ Id = 'DisableMSOnline'; Name = 'Disable MS Account Prompts'; Default = $true; Description = 'Suppresses Windows reminders for backup, Microsoft 365, and Microsoft account upsells. Uses the Start account-notification policy, Windows Backup monitoring, SCOOBE, and the backup/365 toast channels for every loaded user. Backup and an existing subscription keep working.'; Impact = 'Use when Settings, Start, or toast reminders for backup and Microsoft 365 keep coming back. Sign out afterwards.' }
+        @{ Id = 'WindowsPrivacy'; Name = 'Windows Privacy'; Default = $true; Description = 'Runs the dedicated privacy script that applies telemetry reduction (registry + services + tasks), ad / recommendation suppression, Start-feed/Widgets background cuts, and hard network blocks (DNS policy + outbound firewall rules) so that no feedback or diagnostic data is sent to Microsoft even at the "basic" level. Keeps local profile picture changes working. It does not rewrite the hosts file.'; Impact = 'Primary privacy baseline for all presets. Also reduces unwanted Microsoft network traffic.' }
+        @{ Id = 'FirewallPrivacy'; Name = 'Firewall Privacy'; Default = $true; Description = 'Turns Windows Firewall profiles on, sets non-domain network adapters to Private (domain/business networks are left alone), and adds outbound firewall blocks for telemetry clients plus resolved privacy/ad endpoints. Complements Windows Privacy and does not rewrite the hosts file.'; Impact = 'Use with Windows Privacy for stronger network-side blocking. Revert removes these rules and restores saved network categories.' }
+        @{ Id = 'DisableMSOnline'; Name = 'Disable MS Account Prompts'; Default = $true; Description = 'Suppresses Windows reminders for backup, Microsoft 365, and Microsoft account upsells. Blocks adding Microsoft accounts without locking local-profile account pictures or Your info settings. Backup and an existing subscription keep working.'; Impact = 'Use when Settings, Start, or toast reminders for backup and Microsoft 365 keep coming back. Sign out afterwards.' }
         @{ Id = 'DisableWindowsAI'; Name = 'Disable Windows AI'; Default = $false; Description = 'Separate task. Turns off Copilot, Recall, Click to Do, online speech, and cloud-assisted search by policy, and disables Windows AI scheduled tasks that are present. Inbox apps stay installed.'; Impact = 'Include when Copilot or Recall should be off. It is not part of Windows Privacy or System Optimisation. Sign out afterwards. Revert turns the policies and tasks back on.' }
         @{ Id = 'FixWindowsDefender'; Name = 'Fix Windows Defender'; Default = $false; Description = 'Runs Defender remediation and policy repair routines to restore core protection features when they are disabled or damaged.'; Impact = 'Helpful on systems where Defender is broken or blocked by old AV remnants.' }
         @{ Id = 'WindowsTroubleshooting'; Name = 'Windows Troubleshooting'; Default = $false; Description = 'Runs the troubleshooting module with guided fixes for common network, update, and Store problems.'; Impact = 'Useful for problem PCs, not required for a routine optimisation pass.' }
-        @{ Id = 'CustomChanges'; Name = 'Custom Changes Panel'; Default = $false; Description = 'Opens the custom changes panel for optional manual tweak flows beyond the standard preset path.'; Impact = 'For power users who want extra manual controls after the baseline setup.' }
         @{ Id = 'ApplyAeroliteTheme'; Name = 'Apply Aerolite Theme'; Default = $false; Description = 'Launches the bundled Aerolite theme file so you can switch visual style as part of final setup.'; Impact = 'Cosmetic change only; does not alter performance/security settings.' }
         @{ Id = 'DISMRestore'; Name = 'DISM Health Check'; Default = $false; Description = 'Checks the Windows component store and repairs corruption when found. Helpful on damaged systems, but slower than a typical preset run.'; Impact = 'Good for machines with update or image-health issues.' }
         @{ Id = 'SFCRepair'; Name = 'System File Check'; Default = $false; Description = 'Scans protected system files and repairs corruption. Useful when Windows components behave oddly, but not necessary for every setup run.'; Impact = 'Adds repair coverage at the cost of runtime.' }
@@ -1813,7 +1811,7 @@ function Show-TaskSelector {
             Name = 'Minimal'
             Description = 'Fastest and safest preset. Keeps the setup light and focuses on cleanup plus balanced optimisation.'
             Disclaimer = 'Minimal selects only the core cleanup and optimisation steps. It avoids extra repair scans, disk checks, and more opinionated removals so the machine stays familiar and usable.'
-            Tasks = @('WindowsCleaner', 'SystemOptimisation', 'WindowsPrivacy', 'DisableMSOnline')
+            Tasks = @('WindowsCleaner', 'SystemOptimisation', 'WindowsPrivacy', 'FirewallPrivacy', 'DisableMSOnline')
             OptimisationProfile = 'minimal'
             AccentColor = [System.Drawing.Color]::FromArgb(220, 245, 220)
             BorderColor = [System.Drawing.Color]::FromArgb(100, 170, 100)
@@ -1823,7 +1821,7 @@ function Show-TaskSelector {
             Name = 'Optimal'
             Description = 'Balanced preset for most PCs (cleanup + optimisation + privacy).'
             Disclaimer = 'Optimal includes debloat, cleaner, OneDrive removal, and balanced optimisation focused on performance, lower idle RAM, and privacy without stripping core Windows UX. Use presets to quickly load a sensible starting checklist.'
-            Tasks = @('WindowsInstallCleanup', 'WindowsUninstallOneDrive', 'WindowsCleaner', 'SystemOptimisation', 'WindowsPrivacy', 'DisableMSOnline')
+            Tasks = @('WindowsInstallCleanup', 'WindowsUninstallOneDrive', 'WindowsCleaner', 'SystemOptimisation', 'WindowsPrivacy', 'FirewallPrivacy', 'DisableMSOnline')
             OptimisationProfile = 'optimal'
             AccentColor = $UiPalette.AccentSoft
             BorderColor = $UiPalette.Border
@@ -1833,7 +1831,7 @@ function Show-TaskSelector {
             Name = 'Aggressive'
             Description = 'Broader repair and tuning preset for problem machines.'
             Disclaimer = 'Aggressive enables extra repair and maintenance steps, includes Disable Windows AI, and may take much longer to finish. But it is the heaviest preset in this tool.'
-            Tasks = @('WindowsInstallCleanup', 'WindowsUninstallOneDrive', 'WindowsCleaner', 'SystemOptimisation', 'WindowsPrivacy', 'DisableMSOnline', 'DisableWindowsAI', 'DISMRestore', 'SFCRepair', 'DiskCheck', 'Defrag')
+            Tasks = @('WindowsInstallCleanup', 'WindowsUninstallOneDrive', 'WindowsCleaner', 'SystemOptimisation', 'WindowsPrivacy', 'FirewallPrivacy', 'DisableMSOnline', 'DisableWindowsAI', 'DISMRestore', 'SFCRepair', 'DiskCheck', 'Defrag')
             OptimisationProfile = 'aggressive'
             AccentColor = [System.Drawing.Color]::FromArgb(255, 230, 230)
             BorderColor = [System.Drawing.Color]::FromArgb(210, 70, 70)
@@ -1843,7 +1841,7 @@ function Show-TaskSelector {
             Name = 'Fix'
             Description = 'Runs all fixing and repair scripts to restore system health.'
             Disclaimer = 'Fix selects every repair and fix task: DISM, SFC, disk checks/repair, Defender fix, troubleshooting, optimisation, privacy hardening, prompt fixes, and visual fixes. Ideal when your system needs comprehensive repairs.'
-            Tasks = @('DISMRestore', 'SFCRepair', 'DiskCheck', 'FixWindowsDefender', 'WindowsTroubleshooting', 'SystemOptimisation', 'WindowsPrivacy', 'DisableMSOnline', 'VisualOptimisation')
+            Tasks = @('DISMRestore', 'SFCRepair', 'DiskCheck', 'FixWindowsDefender', 'WindowsTroubleshooting', 'SystemOptimisation', 'WindowsPrivacy', 'FirewallPrivacy', 'DisableMSOnline', 'VisualOptimisation')
             OptimisationProfile = 'optimal'
             AccentColor = [System.Drawing.Color]::FromArgb(255, 243, 224)
             BorderColor = [System.Drawing.Color]::FromArgb(230, 126, 34)
@@ -1881,7 +1879,7 @@ function Show-TaskSelector {
             $startButton.ForeColor = [System.Drawing.Color]::White
 
             # Auto-select tasks that have dedicated revert scripts for convenience
-            $revertableIds = @('WindowsPrivacy','SystemOptimisation','DisableMSOnline','DisableWindowsAI','VisualOptimisation','WindowsUninstallOneDrive') + @($script:OptimisationTaskOptions | ForEach-Object { [string]$_.Id })
+            $revertableIds = @('WindowsPrivacy','FirewallPrivacy','SystemOptimisation','DisableMSOnline','DisableWindowsAI','VisualOptimisation','WindowsUninstallOneDrive') + @($script:OptimisationTaskOptions | ForEach-Object { [string]$_.Id })
             for ($i = 0; $i -lt $checkedTasks.Items.Count; $i++) {
                 $tName = [string]$checkedTasks.Items[$i]
                 $tid = $taskLookup[$tName].Id
@@ -1905,6 +1903,10 @@ function Show-TaskSelector {
             if ($leavingRevert) {
                 Set-SetupPreset -PresetName 'Custom'
             }
+        }
+
+        if (Get-Command Update-OldSchoolThemeOption -ErrorAction SilentlyContinue) {
+            Update-OldSchoolThemeOption
         }
     }
 
@@ -1972,7 +1974,7 @@ function Show-TaskSelector {
 
     $checkedTasks = New-Object System.Windows.Forms.CheckedListBox
     $checkedTasks.Location = New-Object System.Drawing.Point(12, 76)
-    $checkedTasks.Size = New-Object System.Drawing.Size(360, 256)
+    $checkedTasks.Size = New-Object System.Drawing.Size(360, 250)
     $checkedTasks.CheckOnClick = $true
     $checkedTasks.BorderStyle = 'FixedSingle'
     $checkedTasks.BackColor = $UiPalette.FormBack
@@ -1983,7 +1985,25 @@ function Show-TaskSelector {
         [void]$checkedTasks.Items.Add($taskDefinition.Name, $false)
     }
 
-    $taskPanel.Controls.AddRange(@($taskPanelTitle, $taskPanelHint, $checkedTasks))
+    $oldSchoolThemeCheck = New-Object System.Windows.Forms.CheckBox
+    $oldSchoolThemeCheck.Text = 'Old school theme (classic grey Win95/98)'
+    $oldSchoolThemeCheck.Location = New-Object System.Drawing.Point(12, 338)
+    $oldSchoolThemeCheck.Size = New-Object System.Drawing.Size(360, 24)
+    $oldSchoolThemeCheck.Enabled = $false
+    $oldSchoolThemeCheck.Checked = $false
+    $oldSchoolThemeCheck.ForeColor = $UiPalette.TextPrimary
+    $oldSchoolThemeCheck.Anchor = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
+
+    $oldSchoolThemeHint = New-Object System.Windows.Forms.Label
+    $oldSchoolThemeHint.Text = 'Enabled with Visual Optimisation. Grey classic controls; Start/taskbar stay modern.'
+    $oldSchoolThemeHint.Location = New-Object System.Drawing.Point(28, 362)
+    $oldSchoolThemeHint.Size = New-Object System.Drawing.Size(340, 32)
+    $oldSchoolThemeHint.ForeColor = $UiPalette.TextMuted
+    $oldSchoolThemeHint.Anchor = [System.Windows.Forms.AnchorStyles]::Bottom -bor [System.Windows.Forms.AnchorStyles]::Left -bor [System.Windows.Forms.AnchorStyles]::Right
+
+    $script:oldSchoolThemeCheck = $oldSchoolThemeCheck
+
+    $taskPanel.Controls.AddRange(@($taskPanelTitle, $taskPanelHint, $checkedTasks, $oldSchoolThemeCheck, $oldSchoolThemeHint))
     $plannerForm.Controls.Add($taskPanel)
 
     $detailPanel = New-Object System.Windows.Forms.Panel
@@ -2045,6 +2065,21 @@ function Show-TaskSelector {
         $detailRecommendation
     ))
     $plannerForm.Controls.Add($detailPanel)
+
+    function Update-OldSchoolThemeOption {
+        $visualSelected = $false
+        foreach ($checkedItem in $checkedTasks.CheckedItems) {
+            if ($taskLookup[[string]$checkedItem].Id -eq 'VisualOptimisation') {
+                $visualSelected = $true
+                break
+            }
+        }
+
+        $oldSchoolThemeCheck.Enabled = $visualSelected -and ($script:operationMode -ne 'Revert')
+        if (-not $visualSelected) {
+            $oldSchoolThemeCheck.Checked = $false
+        }
+    }
 
     $selectAllButton = New-Object System.Windows.Forms.Button
     $selectAllButton.Text = 'Select All'
@@ -2130,6 +2165,8 @@ function Show-TaskSelector {
                 $presetButton.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Regular)
             }
         }
+
+        Update-OldSchoolThemeOption
     }
 
     $presetX = 480
@@ -2175,7 +2212,13 @@ function Show-TaskSelector {
         }
     }
 
+    $checkedTasks.Add_ItemCheck({
+        # ItemCheck fires before the check state changes; defer enablement update.
+        $plannerForm.BeginInvoke([action]{ Update-OldSchoolThemeOption }) | Out-Null
+    })
+
     $checkedTasks.Add_SelectedIndexChanged({
+        Update-OldSchoolThemeOption
         if ($checkedTasks.SelectedIndex -ge 0) {
             Update-PlannerDetails -TaskName ([string]$checkedTasks.Items[$checkedTasks.SelectedIndex])
         }
@@ -2185,12 +2228,14 @@ function Show-TaskSelector {
         for ($i = 0; $i -lt $checkedTasks.Items.Count; $i++) {
             $checkedTasks.SetItemChecked($i, $true)
         }
+        Update-OldSchoolThemeOption
     })
 
     $clearAllButton.Add_Click({
         for ($i = 0; $i -lt $checkedTasks.Items.Count; $i++) {
             $checkedTasks.SetItemChecked($i, $false)
         }
+        Update-OldSchoolThemeOption
     })
 
     $startButton.Add_Click({
@@ -2213,6 +2258,7 @@ function Show-TaskSelector {
             Confirmed = $true
             SelectedTaskIds = $selectedTaskIds
             OptimisationProfile = $selectedOptimisationProfile
+            OldSchoolTheme = [bool]($oldSchoolThemeCheck.Enabled -and $oldSchoolThemeCheck.Checked)
             Revert = ($script:operationMode -eq 'Revert')
         }
         $plannerForm.DialogResult = [System.Windows.Forms.DialogResult]::OK
@@ -2283,7 +2329,11 @@ function Show-TaskSelector {
         $detailPanel.Size = New-Object System.Drawing.Size($detailWidth, $contentHeight)
 
         $taskPanelHint.Size = New-Object System.Drawing.Size(($taskPanel.Width - 30), 32)
-        $checkedTasks.Size = New-Object System.Drawing.Size(($taskPanel.Width - 30), [Math]::Max(180, ($taskPanel.Height - 96)))
+        $checkedTasks.Size = New-Object System.Drawing.Size(($taskPanel.Width - 30), [Math]::Max(160, ($taskPanel.Height - 160)))
+        $oldSchoolThemeCheck.Location = New-Object System.Drawing.Point(12, ($taskPanel.Height - 70))
+        $oldSchoolThemeCheck.Size = New-Object System.Drawing.Size(($taskPanel.Width - 30), 24)
+        $oldSchoolThemeHint.Location = New-Object System.Drawing.Point(28, ($taskPanel.Height - 44))
+        $oldSchoolThemeHint.Size = New-Object System.Drawing.Size(($taskPanel.Width - 46), 32)
 
         $detailDescription.Size = New-Object System.Drawing.Size(($detailPanel.Width - 35), [Math]::Max(90, [Math]::Floor(($detailPanel.Height - 120) * 0.46)))
         $detailImpactTitle.Location = New-Object System.Drawing.Point(16, ($detailDescription.Bottom + 16))
@@ -2323,6 +2373,7 @@ function Start-AutomatedMaintenance {
         [switch]$ScheduleMode,
         [string[]]$SelectedTaskIds,
         [string]$OptimisationProfile = 'optimal',
+        [switch]$OldSchoolTheme,
         [switch]$Revert
     )
 
@@ -2359,11 +2410,11 @@ function Start-AutomatedMaintenance {
             WindowsPrivacy = $scriptPaths['WindowsPrivacy']
             DisableMSOnline = $scriptPaths['DisableMSOnline']
             DisableWindowsAI = $scriptPaths['DisableWindowsAI']
+            FirewallPrivacy = $scriptPaths['FirewallPrivacy']
             VisualOptimisation = $scriptPaths['VisualOptimisation']
             UserCleaner = $scriptPaths['UserCleaner']
             DefenderFix = $scriptPaths['DefenderFix']
             Troubleshooting = $scriptPaths['Troubleshooting']
-            CustomChanges = $scriptPaths['CustomChanges']
             AeroliteTheme = $scriptPaths['AeroliteTheme']
         }
 
@@ -2412,8 +2463,16 @@ function Start-AutomatedMaintenance {
             & $runExternalScript -ScriptPath $resolvedScriptPaths.DisableWindowsAI -ArgumentList @('--automated')
         }.GetNewClosure()
 
+        $firewallPrivacyTask = {
+            & $runExternalScript -ScriptPath $resolvedScriptPaths.FirewallPrivacy -ArgumentList @('--automated')
+        }.GetNewClosure()
+
+        $visualArgs = @('--automated')
+        if ($OldSchoolTheme) {
+            $visualArgs += '--old-school'
+        }
         $visualOptimisationTask = {
-            & $runExternalScript -ScriptPath $resolvedScriptPaths.VisualOptimisation -ArgumentList @('--automated')
+            & $runExternalScript -ScriptPath $resolvedScriptPaths.VisualOptimisation -ArgumentList $visualArgs
         }.GetNewClosure()
 
         $userCleanerTask = {
@@ -2426,10 +2485,6 @@ function Start-AutomatedMaintenance {
 
         $troubleshootingTask = {
             & $runExternalScript -ScriptPath $resolvedScriptPaths.Troubleshooting
-        }.GetNewClosure()
-
-        $customChangesTask = {
-            & $runExternalScript -ScriptPath $resolvedScriptPaths.CustomChanges
         }.GetNewClosure()
 
         $applyAeroliteThemeTask = {
@@ -2472,11 +2527,11 @@ function Start-AutomatedMaintenance {
             @{ Id = 'SystemOptimisation'; Name = 'System Optimisation'; Script = $systemOptimisationTask; Weight = 18; Default = $true }
         ) + $optCatalogue + @(
             @{ Id = 'WindowsPrivacy'; Name = 'Windows Privacy'; Script = $windowsPrivacyTask; Weight = 16; Default = $true }
+            @{ Id = 'FirewallPrivacy'; Name = 'Firewall Privacy'; Script = $firewallPrivacyTask; Weight = 12; Default = $true }
             @{ Id = 'DisableMSOnline'; Name = 'Disable MS Account Prompts'; Script = $disableMSOnlineTask; Weight = 10; Default = $true }
             @{ Id = 'DisableWindowsAI'; Name = 'Disable Windows AI'; Script = $disableWindowsAITask; Weight = 8; Default = $false }
             @{ Id = 'FixWindowsDefender'; Name = 'Fix Windows Defender'; Script = $fixDefenderTask; Weight = 12; Default = $false }
             @{ Id = 'WindowsTroubleshooting'; Name = 'Windows Troubleshooting'; Script = $troubleshootingTask; Weight = 8; Default = $false }
-            @{ Id = 'CustomChanges'; Name = 'Custom Changes Panel'; Script = $customChangesTask; Weight = 6; Default = $false }
             @{ Id = 'ApplyAeroliteTheme'; Name = 'Apply Aerolite Theme'; Script = $applyAeroliteThemeTask; Weight = 4; Default = $false }
             @{ Id = 'DISMRestore'; Name = 'DISM Health Check'; Script = $Scripts.DISMRestore; Weight = 14; Default = $false }
             @{ Id = 'SFCRepair'; Name = 'System File Check'; Script = $Scripts.SFCRepair; Weight = 14; Default = $false }
@@ -2628,7 +2683,7 @@ $Form.Add_Shown({
         if (-not $selection -or -not $selection.Confirmed -or -not $selection.SelectedTaskIds -or $selection.SelectedTaskIds.Count -eq 0) {
             break  # Cancel or close in the selector -> end the session
         }
-        Start-AutomatedMaintenance -SelectedTaskIds $selection.SelectedTaskIds -OptimisationProfile ([string]$selection.OptimisationProfile) -Revert:([bool]$selection.Revert)
+        Start-AutomatedMaintenance -SelectedTaskIds $selection.SelectedTaskIds -OptimisationProfile ([string]$selection.OptimisationProfile) -OldSchoolTheme:([bool]$selection.OldSchoolTheme) -Revert:([bool]$selection.Revert)
         # Re-show the selector (return to main menu) after the run finishes. Progress dialogue is closed by the automation.
     }
     # User chose to exit (cancelled the selector)

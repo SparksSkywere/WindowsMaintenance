@@ -1,4 +1,4 @@
-# Check if called from main script (automated mode)
+﻿# Check if called from main script (automated mode)
 $AutomatedMode = $args -contains "--automated"
 $OptimisationProfile = "optimal"
 $OptimisationAction = ""
@@ -601,17 +601,27 @@ function Optimise-RuntimeFootprint {
             Set-ItemProperty -Path $nduPath -Name 'Start' -Value 4 -Type DWord -Force
         }
 
+        # Modern Windows already adapts Prefetch/SysMain for SSDs. Keeping them on improves
+        # app/boot launch while still releasing standby RAM when programs need it.
+        $prefetchPath = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters'
+        if (-not (Test-Path $prefetchPath)) { New-Item -Path $prefetchPath -Force | Out-Null }
+        Set-ItemProperty -Path $prefetchPath -Name 'EnablePrefetcher' -Value 3 -Type DWord -Force
+        Set-ItemProperty -Path $prefetchPath -Name 'EnableSuperfetch' -Value 3 -Type DWord -Force
         if (Test-SystemDiskSolidState) {
-            $prefetchPath = 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management\PrefetchParameters'
-            if (Test-Path $prefetchPath) {
-                Set-ItemProperty -Path $prefetchPath -Name 'EnablePrefetcher' -Value 0 -Type DWord -Force
-                Set-ItemProperty -Path $prefetchPath -Name 'EnableSuperfetch' -Value 0 -Type DWord -Force
-                Write-Host "  Prefetch disabled because the system disk is solid-state." -ForegroundColor Green
-            }
-            fsutil behavior set disablelastaccess 1 2>$null | Out-Null
+            Write-Host "  Prefetch/SysMain left enabled on SSD (Windows adapts; helps app launch)." -ForegroundColor Green
         } else {
-            Write-Host "  Prefetch left on because the system disk is not a detected SSD." -ForegroundColor Yellow
+            Write-Host "  Prefetch/SysMain enabled for the system disk." -ForegroundColor Green
         }
+
+        Optimise-DiskResponsiveness
+
+        # Stop Windows automatically reopening apps after sign-in / updates (faster usable desktop).
+        $restartApps = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+        if (-not (Test-Path $restartApps)) { New-Item -Path $restartApps -Force | Out-Null }
+        Set-ItemProperty -Path $restartApps -Name 'DisableAutomaticRestartSignOn' -Value 1 -Type DWord -Force
+        $winlogonPath = 'HKCU:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon'
+        if (-not (Test-Path $winlogonPath)) { New-Item -Path $winlogonPath -Force | Out-Null }
+        Set-ItemProperty -Path $winlogonPath -Name 'RestartApps' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
 
         # Legacy peer-name services are not used for normal internet or file sharing.
         foreach ($legacyService in @('PNRPsvc', 'p2psvc', 'p2pimsvc', 'Fax', 'RetailDemo', 'MapsBroker', 'RemoteRegistry')) {
@@ -622,9 +632,55 @@ function Optimise-RuntimeFootprint {
             }
         }
 
+        # Unused IPv6 transition tunnels add background work. Native IPv6 stays enabled.
+        try { netsh interface teredo set state disabled 2>$null | Out-Null } catch {}
+        try { netsh interface 6to4 set state disabled 2>$null | Out-Null } catch {}
+        try { netsh interface isatap set state disabled 2>$null | Out-Null } catch {}
+
+        # SMB1 is obsolete and rarely needed. Normal file sharing uses SMB2/3.
+        try {
+            $smb1 = Get-WindowsOptionalFeature -Online -FeatureName 'SMB1Protocol' -ErrorAction SilentlyContinue
+            if ($smb1 -and $smb1.State -eq 'Enabled') {
+                Disable-WindowsOptionalFeature -Online -FeatureName 'SMB1Protocol' -NoRestart -ErrorAction SilentlyContinue | Out-Null
+                Write-Host "  SMB1 disabled (SMB2/3 file sharing remains)." -ForegroundColor Green
+            }
+        } catch {}
+
         Write-Host "  Runtime footprint applied. Restart so service and device changes finish loading." -ForegroundColor Yellow
         Write-Host "  Idle memory stays higher than the open programs suggest. Windows compresses unused pages and keeps a standby cache so programs reopen faster. Both are released when an app needs the RAM, so this pass does not empty that cache." -ForegroundColor Yellow
     } "Optimise-RuntimeFootprint"
+}
+
+function Optimise-DiskResponsiveness {
+    Safe-Execute {
+        # Safe NTFS / SSD helpers that keep Search, Defender, Update, and shell working.
+        fsutil behavior set disablelastaccess 1 2>$null | Out-Null
+        fsutil behavior set disable8dot3 1 2>$null | Out-Null
+
+        if (Test-SystemDiskSolidState) {
+            # Ensure TRIM/UNMAP stays on so the SSD can reclaim blocks.
+            fsutil behavior set disabledeletenotify 0 2>$null | Out-Null
+            Write-Host "  NTFS last-access off, 8.3 names off, TRIM left enabled." -ForegroundColor Green
+        } else {
+            Write-Host "  NTFS last-access off and 8.3 names off." -ForegroundColor Green
+        }
+
+        $totalKb = 0
+        try {
+            $os = Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop
+            $totalKb = [int64]$os.TotalVisibleMemorySize
+        } catch {}
+
+        # Give NTFS a larger cache on machines with enough RAM (helps Explorer / large folders).
+        $fsPath = 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem'
+        if (-not (Test-Path $fsPath)) { New-Item -Path $fsPath -Force | Out-Null }
+        if ($totalKb -ge (16 * 1024 * 1024)) {
+            Set-ItemProperty -Path $fsPath -Name 'NtfsMemoryUsage' -Value 2 -Type DWord -Force
+            Write-Host "  NTFS memory usage raised for 16 GB+ systems." -ForegroundColor Green
+        } else {
+            Set-ItemProperty -Path $fsPath -Name 'NtfsMemoryUsage' -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+        }
+    } "Optimise-DiskResponsiveness"
 }
 
 function Disable-WindowsDefenderRealTime {
@@ -676,11 +732,7 @@ function Optimise-Gaming {
 
 function Optimise-Storage {
     Safe-Execute {
-        # Disable NTFS 8.3 filename creation (reduces metadata overhead)
-        fsutil behavior set disable8dot3 1 2>$null
-
-        # Disable NTFS last access timestamp (reduces disk writes on every file read)
-        fsutil behavior set disablelastaccess 1 2>$null
+        Optimise-DiskResponsiveness
 
         # Disable Delivery Optimisation (prevents Windows using your bandwidth to seed updates to others)
         $doRegPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization"
@@ -732,6 +784,16 @@ function Optimise-Startup {
         # Increase processor scheduling priority for foreground applications
         Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -Value 38 -Force
 
+        # Faster shutdown / sign-out waits (apps can still save; hung apps close sooner)
+        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'WaitToKillAppTimeout' -Value '2000' -Type String -Force
+        Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'HungAppTimeout' -Value '2000' -Type String -Force
+        Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control' -Name 'WaitToKillServiceTimeout' -Value '2000' -Type String -Force
+
+        # Do not automatically restore previous apps after reboot / update
+        $policySystem = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+        if (-not (Test-Path $policySystem)) { New-Item -Path $policySystem -Force | Out-Null }
+        Set-ItemProperty -Path $policySystem -Name 'DisableAutomaticRestartSignOn' -Value 1 -Type DWord -Force
+
     } "Startup & Boot Optimisations"
 }
 
@@ -753,6 +815,7 @@ function Optimise-ScheduledTasks {
             "\Microsoft\Windows\Maintenance\WinSAT",
             "\Microsoft\Windows\Feedback\Siuf\DmClient",
             "\Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload",
+            "\Microsoft\Windows\PerformanceTrace\ShowFeedbackToast",
             "\Microsoft\Windows\Windows Error Reporting\QueueReporting",
             "\Microsoft\Windows\Power Efficiency Diagnostics\AnalyzeSystem",
             "\Microsoft\Windows\CloudExperienceHost\CreateObjectTask",
@@ -762,7 +825,24 @@ function Optimise-ScheduledTasks {
             "\Microsoft\Windows\Clip\License Validation",
             "\Microsoft\Windows\Shell\FamilySafetyMonitor",
             "\Microsoft\Windows\Shell\FamilySafetyRefreshTask",
-            "\Microsoft\Windows\ApplicationData\DsSvcCleanup"
+            "\Microsoft\Windows\ApplicationData\DsSvcCleanup",
+            "\Microsoft\Windows\Application Experience\PcaPatchDbTask",
+            "\Microsoft\Windows\Diagnosis\Scheduled",
+            "\Microsoft\Windows\Flighting\FeatureConfig\ReconcileFeatures",
+            "\Microsoft\Windows\Flighting\FeatureConfig\UsageDataFlushing",
+            "\Microsoft\Windows\Flighting\FeatureConfig\UsageDataReporting",
+            "\Microsoft\Windows\InstallService\ScanForUpdates",
+            "\Microsoft\Windows\InstallService\ScanForUpdatesAsUser",
+            "\Microsoft\Windows\InstallService\SmartRetry",
+            "\Microsoft\Windows\InstallService\WakeUpAndContinueUpdates",
+            "\Microsoft\Windows\InstallService\WakeUpAndScanForUpdates",
+            "\Microsoft\Windows\Maps\MapsToastTask",
+            "\Microsoft\Windows\Maps\MapsUpdateTask",
+            "\Microsoft\Windows\Mobile Broadband Accounts\MNO Metadata Parser",
+            "\Microsoft\Windows\PI\Sqm-Tasks",
+            "\Microsoft\Windows\NetTrace\GatherNetworkInfo",
+            "\Microsoft\Windows\input\RemoteTouchpadSyncDataAvailable",
+            "\Microsoft\Windows\input\TouchpadSyncDataAvailable"
         )
 
         foreach ($task in $tasks) {
@@ -780,11 +860,13 @@ function Optimise-ScheduledTasks {
 
 function Disable-WindowsWidgets {
     Safe-Execute {
-        Write-Host "Disabling Windows Widgets and feed surfaces..." -ForegroundColor Cyan
+        Write-Host "Disabling Windows Widgets, Start feed, and news surfaces..." -ForegroundColor Cyan
 
         $explorerAdvancedPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
         if (-not (Test-Path $explorerAdvancedPath)) { New-Item -Path $explorerAdvancedPath -Force | Out-Null }
         Set-ItemProperty -Path $explorerAdvancedPath -Name "TaskbarDa" -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $explorerAdvancedPath -Name "Start_IrisRecommendations" -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $explorerAdvancedPath -Name "Start_AccountNotifications" -Value 0 -Force -ErrorAction SilentlyContinue
 
         $widgetsPolicyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Dsh"
         if (-not (Test-Path $widgetsPolicyPath)) { New-Item -Path $widgetsPolicyPath -Force | Out-Null }
@@ -798,8 +880,36 @@ function Disable-WindowsWidgets {
         if (-not (Test-Path $feedsUserPath)) { New-Item -Path $feedsUserPath -Force | Out-Null }
         Set-ItemProperty -Path $feedsUserPath -Name "ShellFeedsTaskbarViewMode" -Value 2 -Force -ErrorAction SilentlyContinue
 
-        Stop-Process -Name Widgets -Force -ErrorAction SilentlyContinue
-        Stop-Process -Name WidgetService -Force -ErrorAction SilentlyContinue
+        # Start Experiences / MicrosoftStartFeedProvider (Start menu recommendations feed)
+        $searchPolicyPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search"
+        if (-not (Test-Path $searchPolicyPath)) { New-Item -Path $searchPolicyPath -Force | Out-Null }
+        Set-ItemProperty -Path $searchPolicyPath -Name "EnableDynamicContentInWSB" -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $searchPolicyPath -Name "DisableWebSearch" -Value 1 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $searchPolicyPath -Name "ConnectedSearchUseWeb" -Value 0 -Force -ErrorAction SilentlyContinue
+
+        $cloudContentUser = "HKCU:\SOFTWARE\Policies\Microsoft\Windows\CloudContent"
+        if (-not (Test-Path $cloudContentUser)) { New-Item -Path $cloudContentUser -Force | Out-Null }
+        Set-ItemProperty -Path $cloudContentUser -Name "DisableTailoredExperiencesWithDiagnosticData" -Value 1 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cloudContentUser -Name "DisableWindowsSpotlightFeatures" -Value 1 -Force -ErrorAction SilentlyContinue
+
+        $bgRoot = "HKCU:\Software\Microsoft\Windows\CurrentVersion\BackgroundAccessApplications"
+        if (-not (Test-Path $bgRoot)) { New-Item -Path $bgRoot -Force | Out-Null }
+        foreach ($pkgName in @('Microsoft.StartExperiencesApp', 'MicrosoftWindows.Client.WebExperience', 'MicrosoftWindows.CrossDevice')) {
+            foreach ($pkg in @(Get-AppxPackage -Name $pkgName -ErrorAction SilentlyContinue)) {
+                if (-not $pkg) { continue }
+                $appPath = Join-Path $bgRoot $pkg.PackageFullName
+                if (-not (Test-Path $appPath)) { New-Item -Path $appPath -Force | Out-Null }
+                Set-ItemProperty -Path $appPath -Name 'BackgroundAccess' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+                Set-ItemProperty -Path $appPath -Name 'Disabled' -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+            }
+        }
+
+        foreach ($procName in @(
+            'Widgets', 'WidgetBoard', 'WidgetService',
+            'MicrosoftStartFeedProvider', 'CrossDeviceResume'
+        )) {
+            Stop-Process -Name $procName -Force -ErrorAction SilentlyContinue
+        }
     } "Disable-WindowsWidgets"
 }
 
@@ -815,12 +925,28 @@ function Optimise-UICleanup {
         $cdmPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager"
         if (-not (Test-Path $cdmPath)) { New-Item -Path $cdmPath -Force | Out-Null }
         Set-ItemProperty -Path $cdmPath -Name "RotatingLockScreenEnabled" -Value 0 -Force
+        Set-ItemProperty -Path $cdmPath -Name "RotatingLockScreenOverlayEnabled" -Value 0 -Force -ErrorAction SilentlyContinue
         Set-ItemProperty -Path $cdmPath -Name "SubscribedContent-338387Enabled" -Value 0 -Force  # Windows tips
         Set-ItemProperty -Path $cdmPath -Name "SubscribedContent-338388Enabled" -Value 0 -Force  # Start suggestions
         Set-ItemProperty -Path $cdmPath -Name "SubscribedContent-338389Enabled" -Value 0 -Force  # Lock screen tips
+        Set-ItemProperty -Path $cdmPath -Name "SubscribedContent-338393Enabled" -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cdmPath -Name "SubscribedContent-353694Enabled" -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cdmPath -Name "SubscribedContent-353696Enabled" -Value 0 -Force -ErrorAction SilentlyContinue
         Set-ItemProperty -Path $cdmPath -Name "SubscribedContent-353698Enabled" -Value 0 -Force  # Timeline suggestions
+        Set-ItemProperty -Path $cdmPath -Name "SubscribedContent-310091Enabled" -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cdmPath -Name "SubscribedContent-314563Enabled" -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cdmPath -Name "SubscribedContent-88000326Enabled" -Value 0 -Force -ErrorAction SilentlyContinue
         Set-ItemProperty -Path $cdmPath -Name "SoftLandingEnabled" -Value 0 -Force
         Set-ItemProperty -Path $cdmPath -Name "SystemPaneSuggestionsEnabled" -Value 0 -Force
+        Set-ItemProperty -Path $cdmPath -Name "ContentDeliveryAllowed" -Value 0 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cdmPath -Name "SilentInstalledAppsEnabled" -Value 0 -Force -ErrorAction SilentlyContinue
+
+        # Machine CloudContent policies used by Win10 and Win11 24H2/25H2
+        $cloudMachine = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent"
+        if (-not (Test-Path $cloudMachine)) { New-Item -Path $cloudMachine -Force | Out-Null }
+        Set-ItemProperty -Path $cloudMachine -Name "DisableWindowsConsumerFeatures" -Value 1 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cloudMachine -Name "DisableSoftLanding" -Value 1 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cloudMachine -Name "DisableCloudOptimizedContent" -Value 1 -Force -ErrorAction SilentlyContinue
 
         # Disable Timeline / Activity History
         $activityPath = "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System"
@@ -908,8 +1034,9 @@ function Optimise-Privacy {
         if (-not (Test-Path $appPrivPath)) { New-Item -Path $appPrivPath -Force | Out-Null }
         Set-ItemProperty -Path $appPrivPath -Name "LetAppsGetDiagnosticInfo" -Value 2 -Force
 
-        # Disable access to account info, calendar, call history, contacts by apps
-        Set-ItemProperty -Path $appPrivPath -Name "LetAppsAccessAccountInfo" -Value 2 -Force
+        # Calendar/contacts/etc stay force-denied. Account info must stay user-controlled so
+        # Settings > Accounts > Your info can change the local profile picture.
+        Remove-ItemProperty -Path $appPrivPath -Name "LetAppsAccessAccountInfo" -Force -ErrorAction SilentlyContinue
         Set-ItemProperty -Path $appPrivPath -Name "LetAppsAccessCalendar" -Value 2 -Force
         Set-ItemProperty -Path $appPrivPath -Name "LetAppsAccessCallHistory" -Value 2 -Force
         Set-ItemProperty -Path $appPrivPath -Name "LetAppsAccessContacts" -Value 2 -Force
@@ -941,10 +1068,13 @@ function Apply-ProfileBasedDebloat {
         $cloudContentUserPath = "HKCU:\SOFTWARE\Policies\Microsoft\Windows\CloudContent"
         if (-not (Test-Path $cloudContentUserPath)) { New-Item -Path $cloudContentUserPath -Force | Out-Null }
 
-        # Baseline recommendation and cloud-content suppression for all profiles.
+        # Baseline recommendation and cloud-content suppression for all profiles (Win10 + Win11 24H2/25H2).
         Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Start_TrackDocs" -Value 0 -Force -ErrorAction SilentlyContinue
         Set-ItemProperty -Path $cloudContentMachinePath -Name "DisableWindowsConsumerFeatures" -Value 1 -Force
+        Set-ItemProperty -Path $cloudContentMachinePath -Name "DisableSoftLanding" -Value 1 -Force -ErrorAction SilentlyContinue
+        Set-ItemProperty -Path $cloudContentMachinePath -Name "DisableCloudOptimizedContent" -Value 1 -Force -ErrorAction SilentlyContinue
         Set-ItemProperty -Path $cloudContentUserPath -Name "DisableTailoredExperiencesWithDiagnosticData" -Value 1 -Force
+        Set-ItemProperty -Path $cloudContentUserPath -Name "DisableWindowsSpotlightFeatures" -Value 1 -Force -ErrorAction SilentlyContinue
 
         if ($Profile -in @("optimal", "aggressive")) {
             # Deeper search and cloud-sync restrictions.
@@ -1006,8 +1136,240 @@ function Apply-ProfileBasedDebloat {
     } "Apply-ProfileBasedDebloat"
 }
 
+function Test-OemTelemetryCandidate {
+    param([string]$Text)
+
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
+
+    # Known OEM telemetry / support-agent tokens win over keep-alive exclusions
+    # (e.g. "HP Audio Analytics" must not be spared just because it contains "Audio").
+    $known = @(
+        'SystemUsageReportSvc', 'SurSvc.exe', 'esrv.exe', 'esrv_svc.exe', 'DSAService', 'DSAUpdateService',
+        'NvTelemetry', 'NvTmRep', 'NvTmMon', 'GfExperienceService', 'GeForce Experience',
+        'HPTouchpointAnalytics', 'HpTouchpointAnalytics', 'Touchpoint Analytics', 'TouchpointAnalytics',
+        'HPSysInfoCap', 'HPAppHelperCap', 'HPDiagsCap', 'HPNetworkCap', 'HPAudioAnalytics',
+        'hpsvcsscan', 'HP Services Scan', 'HP Insights Analytics', 'AppHelperCap', 'DiagsCap',
+        'NetworkCap', 'SysInfoCap',
+        'SupportAssist', 'DellDataVault', 'DDVDataCollector', 'DDVCollector', 'DDVRulesProcessor',
+        'DellTechHub', 'ImController', 'LenovoVantage', 'AUEPMaster', 'AUEPLauncher',
+        '\Intel\SUR\', '\Driver and Support Assistant\', '\NvTelemetry\',
+        '\HP Touchpoint Analytics Client\', '\Dell\SupportAssist\', '\DellDataVault\', '\ImController\',
+        'hpanalyticscomp', 'hpcustomcapcomp', 'hpsvcsscancomp'
+    )
+    foreach ($token in $known) {
+        if ($Text -like "*$token*") { return $true }
+    }
+
+    $excluded = @(
+        'Display Container', 'Display.NvContainer', 'NVDisplay', 'External Events', 'Crash Defender',
+        'HD Audio', 'Hotkey', 'Hot Key', 'Thermal', 'Dynamic Platform', 'Rapid Storage',
+        'Graphics Command', 'System Control Interface', 'Armoury', 'Fan Control',
+        'Management Engine Interface', 'Chipset', 'Bluetooth', 'Wireless', 'Wi-Fi',
+        'Realtek', 'RtkAud', 'Printer', 'Print Scan', 'Storage Middleware', 'PresentMon'
+    )
+    foreach ($word in $excluded) {
+        if ($Text -like "*$word*") { return $false }
+    }
+
+    $vendorPattern = '(?i)(?<![A-Za-z0-9])(Intel|AMD|NVIDIA|Nvidia|Dell|Alienware|Lenovo|Acer|ASUS|Asus|HP|Hewlett-Packard)(?![A-Za-z0-9])'
+    $rubbishPattern = '(?i)(System Usage Report|Usage Report|Telemetry|Analytics|Customer Experience|Computing Improvement|Support Assistant|User Experience Program|PC Analytics|Insights Analytics|Support Solutions Framework|Digital Delivery|Live Update|Services Scan|HSA Service)'
+    if (([regex]::IsMatch($Text, $vendorPattern)) -and ([regex]::IsMatch($Text, $rubbishPattern))) {
+        return $true
+    }
+    return $false
+}
+
+function Test-UserModeWin32ServiceType {
+    param($ServiceType)
+
+    if ($null -eq $ServiceType) { return $false }
+
+    if ($ServiceType -is [string]) {
+        # Modern CIM returns "Own Process" / "Share Process" instead of numeric flags.
+        return $ServiceType -match '(?i)Own Process|Share Process'
+    }
+
+    try {
+        $serviceType = [int]$ServiceType
+        return (($serviceType -band 48) -ne 0) -and (($serviceType -band 3) -eq 0)
+    } catch {
+        return ([string]$ServiceType) -match '(?i)Own Process|Share Process'
+    }
+}
+
+function Disable-OemVendorTelemetry {
+    Write-Host "Checking for OEM usage reports and support agents..." -ForegroundColor Cyan
+    $storeRoot = 'HKLM:\SOFTWARE\WindowsMaintenance'
+    if (-not (Test-Path -LiteralPath $storeRoot)) { New-Item -Path $storeRoot -Force | Out-Null }
+    $serviceStore = Join-Path $storeRoot 'OemServiceStartup'
+    $runStore = Join-Path $storeRoot 'OemRun'
+    if (-not (Test-Path -LiteralPath $serviceStore)) { New-Item -Path $serviceStore -Force | Out-Null }
+    if (-not (Test-Path -LiteralPath $runStore)) { New-Item -Path $runStore -Force | Out-Null }
+
+    $stopped = 0
+    $services = @(Get-CimInstance -ClassName Win32_Service -ErrorAction SilentlyContinue)
+    foreach ($service in $services) {
+        if (-not $service) { continue }
+        if (-not (Test-UserModeWin32ServiceType -ServiceType $service.ServiceType)) { continue }
+
+        $blob = ($service.Name + ' ' + $service.DisplayName + ' ' + $service.PathName)
+        if (-not (Test-OemTelemetryCandidate -Text $blob)) { continue }
+        if ($service.StartMode -eq 'Disabled') { continue }
+
+        $prior = 'Manual'
+        if ($service.StartMode -eq 'Auto') { $prior = 'Automatic' }
+        elseif ($service.StartMode -eq 'Manual') { $prior = 'Manual' }
+        else { continue }
+
+        $alreadyStored = Get-ItemProperty -LiteralPath $serviceStore -Name $service.Name -ErrorAction SilentlyContinue
+        if (-not $alreadyStored) {
+            New-ItemProperty -LiteralPath $serviceStore -Name $service.Name -Value $prior -PropertyType String -Force | Out-Null
+        }
+        if ($service.State -eq 'Running') {
+            Stop-Service -Name $service.Name -Force -ErrorAction SilentlyContinue
+        }
+        Set-Service -Name $service.Name -StartupType Disabled -ErrorAction SilentlyContinue
+        Write-Host "  Stopped OEM service: $($service.DisplayName) [$($service.Name)]" -ForegroundColor Green
+        $stopped++
+    }
+
+    $tasks = @(Get-ScheduledTask -ErrorAction SilentlyContinue)
+    $disabledTasks = @()
+    $existingTasks = @()
+    $taskKey = Get-Item -LiteralPath $storeRoot -ErrorAction SilentlyContinue
+    if ($taskKey) {
+        $savedTasks = $taskKey.GetValue('OemScheduledTasks')
+        if ($savedTasks) { $existingTasks = @($savedTasks) }
+    }
+    foreach ($task in $tasks) {
+        if (-not $task) { continue }
+        if ($task.TaskPath -like '\Microsoft\*') { continue }
+        if ($task.State -eq 'Disabled') { continue }
+        $taskText = $task.TaskPath + ' ' + $task.TaskName
+        foreach ($action in @($task.Actions)) {
+            if ($action -and $action.Execute) { $taskText += ' ' + $action.Execute }
+        }
+        if (-not (Test-OemTelemetryCandidate -Text $taskText)) { continue }
+        $taskName = $task.TaskPath + $task.TaskName
+        try {
+            & schtasks.exe /Change /TN $taskName /Disable 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "  Stopped OEM scheduled task: $taskName" -ForegroundColor Green
+                $disabledTasks += $taskName
+                $stopped++
+            }
+        } catch {}
+    }
+    if ($disabledTasks.Count -gt 0) {
+        $combinedTasks = @(($existingTasks + $disabledTasks) | Select-Object -Unique)
+        Set-ItemProperty -LiteralPath $storeRoot -Name 'OemScheduledTasks' -Value $combinedTasks -Type MultiString -Force
+    }
+
+    $runPaths = @(
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run',
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run',
+        'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+    )
+    $userHives = @(Get-ChildItem -Path 'Registry::HKEY_USERS' -ErrorAction SilentlyContinue | Where-Object { $_.PSChildName -match '^S-1-5-21-' -and $_.PSChildName -notmatch '_Classes$' })
+    foreach ($hive in $userHives) {
+        $runPaths += ('Registry::HKEY_USERS\' + $hive.PSChildName + '\Software\Microsoft\Windows\CurrentVersion\Run')
+    }
+    foreach ($runPath in $runPaths) {
+        if (-not (Test-Path -LiteralPath $runPath)) { continue }
+        $runKey = Get-Item -LiteralPath $runPath -ErrorAction SilentlyContinue
+        if (-not $runKey) { continue }
+        foreach ($valueName in @($runKey.Property)) {
+            if ([string]::IsNullOrWhiteSpace($valueName)) { continue }
+            $valueData = [string]$runKey.GetValue($valueName)
+            if (-not (Test-OemTelemetryCandidate -Text ($valueName + ' ' + $valueData))) { continue }
+            $entryId = [guid]::NewGuid().ToString('N')
+            $entryPath = Join-Path $runStore $entryId
+            New-Item -Path $entryPath -Force | Out-Null
+            New-ItemProperty -LiteralPath $entryPath -Name 'HivePath' -Value $runPath -PropertyType String -Force | Out-Null
+            New-ItemProperty -LiteralPath $entryPath -Name 'ValueName' -Value $valueName -PropertyType String -Force | Out-Null
+            New-ItemProperty -LiteralPath $entryPath -Name 'ValueData' -Value $valueData -PropertyType String -Force | Out-Null
+            Remove-ItemProperty -LiteralPath $runPath -Name $valueName -Force -ErrorAction SilentlyContinue
+            Write-Host "  Removed OEM startup entry: $valueName" -ForegroundColor Green
+            $stopped++
+        }
+    }
+
+    $processes = @(Get-CimInstance -ClassName Win32_Process -ErrorAction SilentlyContinue)
+    foreach ($process in $processes) {
+        if (-not $process) { continue }
+        $exe = [string]$process.ExecutablePath
+        if ([string]::IsNullOrWhiteSpace($exe)) { continue }
+        if (-not (Test-OemTelemetryCandidate -Text ($process.Name + ' ' + $exe))) { continue }
+        Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
+        Write-Host "  Stopped OEM process: $($process.Name)" -ForegroundColor Green
+        $stopped++
+    }
+
+    if ($stopped -eq 0) {
+        Write-Host "  No OEM usage-report or support-agent software was found." -ForegroundColor DarkGray
+    } else {
+        Write-Host "OEM usage reports and support agents stopped. Graphics, audio, storage, and hotkey software stays available." -ForegroundColor Yellow
+    }
+}
+
+function Restore-OemVendorComponents {
+    $storeRoot = 'HKLM:\SOFTWARE\WindowsMaintenance'
+    $serviceStore = Join-Path $storeRoot 'OemServiceStartup'
+    if (Test-Path -LiteralPath $serviceStore) {
+        $serviceKey = Get-Item -LiteralPath $serviceStore -ErrorAction SilentlyContinue
+        if ($serviceKey) {
+            foreach ($serviceName in @($serviceKey.Property)) {
+                if ([string]::IsNullOrWhiteSpace($serviceName)) { continue }
+                $mode = [string]$serviceKey.GetValue($serviceName)
+                if ($mode -ne 'Automatic' -and $mode -ne 'Manual' -and $mode -ne 'Disabled') { continue }
+                Set-Service -Name $serviceName -StartupType $mode -ErrorAction SilentlyContinue
+                if ($mode -eq 'Automatic') {
+                    Start-Service -Name $serviceName -ErrorAction SilentlyContinue
+                }
+                Remove-ItemProperty -LiteralPath $serviceStore -Name $serviceName -Force -ErrorAction SilentlyContinue
+                Write-Host "  Restored OEM service: $serviceName ($mode)" -ForegroundColor Green
+            }
+        }
+    }
+
+    if (Test-Path -LiteralPath $storeRoot) {
+        $storeKey = Get-Item -LiteralPath $storeRoot -ErrorAction SilentlyContinue
+        if ($storeKey) {
+            $savedTasks = @($storeKey.GetValue('OemScheduledTasks'))
+            foreach ($taskName in $savedTasks) {
+                if ([string]::IsNullOrWhiteSpace($taskName)) { continue }
+                & schtasks.exe /Change /TN $taskName /Enable 2>$null | Out-Null
+                Write-Host "  Restored OEM scheduled task: $taskName" -ForegroundColor Green
+            }
+            Remove-ItemProperty -LiteralPath $storeRoot -Name 'OemScheduledTasks' -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    $runStore = Join-Path $storeRoot 'OemRun'
+    if (Test-Path -LiteralPath $runStore) {
+        $entries = @(Get-ChildItem -LiteralPath $runStore -ErrorAction SilentlyContinue)
+        foreach ($entry in $entries) {
+            if (-not $entry) { continue }
+            $hivePath = [string]$entry.GetValue('HivePath')
+            $valueName = [string]$entry.GetValue('ValueName')
+            $valueData = [string]$entry.GetValue('ValueData')
+            if (-not [string]::IsNullOrWhiteSpace($hivePath) -and -not [string]::IsNullOrWhiteSpace($valueName)) {
+                if (Test-Path -LiteralPath $hivePath) {
+                    New-ItemProperty -LiteralPath $hivePath -Name $valueName -Value $valueData -PropertyType String -Force | Out-Null
+                    Write-Host "  Restored OEM startup entry: $valueName" -ForegroundColor Green
+                }
+            }
+            Remove-Item -LiteralPath $entry.PSPath -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 function Optimise-AdditionalServices {
     Safe-Execute {
+        # COM+/DCOM core is intentionally left alone:
+        # EventSystem, COMSysApp, and DcomLaunch are required by Windows and many apps.
+        Write-Host "  Leaving COM+ Event System, COM+ System Application, and DCOM Server Process Launcher running." -ForegroundColor DarkGray
+
         # Services that are safe to disable on most desktop/laptop systems
         $servicesToDisable = @(
             @{ Name = "RemoteRegistry";  Label = "Remote Registry (security risk - allows remote registry edits)" },
@@ -1029,7 +1391,29 @@ function Optimise-AdditionalServices {
             @{ Name = "DoSvc";           Label = "Delivery Optimisation (peer-to-peer updates - not needed on single PC)" },
             @{ Name = "InventorySvc";    Label = "Inventory and Compatibility Appraisal (telemetry)" },
             @{ Name = "NPSMSvc";         Label = "Now Playing Session Manager (media telemetry)" },
-            @{ Name = "whesvc";          Label = "Windows Health and Optimised Experiences (telemetry/diagnostics)" }
+            @{ Name = "whesvc";          Label = "Windows Health and Optimised Experiences (telemetry/diagnostics)" },
+            @{ Name = "SSDPSRV";         Label = "SSDP Discovery (UPnP network chatter)" },
+            @{ Name = "upnphost";        Label = "UPnP Device Host" },
+            @{ Name = "CscService";      Label = "Offline Files" },
+            @{ Name = "RpcLocator";      Label = "Remote Procedure Call Locator (legacy)" },
+            @{ Name = "NetTcpPortSharing"; Label = "Net.Tcp Port Sharing" },
+            @{ Name = "diagnosticshub.standardcollector.service"; Label = "Diagnostics Hub Standard Collector" },
+            @{ Name = "diagsvc";         Label = "Diagnostic Execution Service" },
+            @{ Name = "WdiServiceHost";  Label = "Diagnostic Service Host" },
+            @{ Name = "MapsBroker";      Label = "Downloaded Maps Manager" },
+            @{ Name = "lfsvc";           Label = "Geolocation Service" },
+            @{ Name = "RetailDemo";      Label = "Retail Demo Service" },
+            @{ Name = "wisvc";           Label = "Windows Insider Service" },
+            @{ Name = "SEMgrSvc";        Label = "Payments / NFC Service" },
+            @{ Name = "WpcMonSvc";       Label = "Parental Controls" },
+            @{ Name = "Fax";             Label = "Fax Service" },
+            @{ Name = "MixedRealityOpenXRSvc"; Label = "Mixed Reality OpenXR Service" },
+            @{ Name = "perceptionsimulation"; Label = "Perception Simulation Service" },
+            @{ Name = "spectrum";        Label = "Windows Perception Service" },
+            @{ Name = "VacSvc";          Label = "Volumetric Audio Compositor" },
+            @{ Name = "WalletService";   Label = "Wallet Service" },
+            @{ Name = "AssignedAccessManagerSvc"; Label = "Assigned Access Manager" },
+            @{ Name = "shpamsvc";        Label = "Shared PC Account Manager" }
         )
 
         foreach ($svc in $servicesToDisable) {
@@ -1078,13 +1462,37 @@ function Optimise-AdditionalServices {
         # Disable Connected Devices Platform (CDP) - reduces idle network chatter
         $cdpServices = @("CDPSvc", "CDPUserSvc")
         foreach ($cdpSvc in $cdpServices) {
-            $service = Get-Service -Name $cdpSvc -ErrorAction SilentlyContinue
-            if ($service) {
-                Stop-Service -Name $cdpSvc -Force -ErrorAction SilentlyContinue
-                Set-Service -Name $cdpSvc -StartupType Disabled -ErrorAction SilentlyContinue
-                Write-Host "  Disabled CDP service: $cdpSvc" -ForegroundColor Green
+            $matchedCdp = @(Get-Service -Name $cdpSvc -ErrorAction SilentlyContinue)
+            if (-not $matchedCdp -and $cdpSvc -eq 'CDPUserSvc') {
+                $matchedCdp = @(Get-Service -Name 'CDPUserSvc*' -ErrorAction SilentlyContinue)
+            }
+            foreach ($service in $matchedCdp) {
+                if (-not $service) { continue }
+                Stop-Service -Name $service.Name -Force -ErrorAction SilentlyContinue
+                Set-Service -Name $service.Name -StartupType Disabled -ErrorAction SilentlyContinue
+                Write-Host "  Disabled CDP service: $($service.Name)" -ForegroundColor Green
             }
         }
+
+        # Messaging / SMS leftover user services (safe when Phone Link is unused)
+        foreach ($msgPattern in @('MessagingService*', 'PimIndexMaintenanceSvc*')) {
+            foreach ($svc in @(Get-Service -Name $msgPattern -ErrorAction SilentlyContinue)) {
+                if (-not $svc) { continue }
+                Stop-Service -Name $svc.Name -Force -ErrorAction SilentlyContinue
+                Set-Service -Name $svc.Name -StartupType Disabled -ErrorAction SilentlyContinue
+                Write-Host "  Disabled leftover user service: $($svc.Name)" -ForegroundColor Green
+            }
+        }
+
+        # MSDTC: Manual (not Disabled). Keeps COM+/transaction plumbing available on demand.
+        $msdtc = Get-Service -Name 'MSDTC' -ErrorAction SilentlyContinue
+        if ($msdtc) {
+            Stop-Service -Name 'MSDTC' -Force -ErrorAction SilentlyContinue
+            Set-Service -Name 'MSDTC' -StartupType Manual -ErrorAction SilentlyContinue
+            Write-Host "  MSDTC set to Manual (COM+ core services remain available)." -ForegroundColor Green
+        }
+
+        Disable-OemVendorTelemetry
 
         Write-Host "Additional service cleanup complete." -ForegroundColor Green
     } "Optimise-AdditionalServices"
@@ -1301,6 +1709,8 @@ function Revert-Optimisations {
             Enable-WindowsOptionalFeature -Online -FeatureName $feature -All -NoRestart -ErrorAction SilentlyContinue | Out-Null
         }
 
+        Restore-OemVendorComponents
+
         # Restore service startup types to balanced defaults.
         $serviceStartupDefaults = @{
             "SysMain" = "Automatic"
@@ -1390,13 +1800,14 @@ if ($AutomatedMode -and [string]::IsNullOrWhiteSpace($OptimisationAction)) {
     
     # Service optimisations
     Show-Progress "Optimising system services..." 80
+    # Keep SysMain automatic. On modern SSDs it still helps app launch and releases RAM on demand.
     $sysmainService = Get-Service "SysMain" -ErrorAction SilentlyContinue
-    if ($sysmainService -and (Test-SystemDiskSolidState)) {
-        Stop-Service "SysMain" -Force -ErrorAction SilentlyContinue
-        Set-Service "SysMain" -StartupType Disabled -ErrorAction SilentlyContinue
+    if ($sysmainService) {
+        Set-Service "SysMain" -StartupType Automatic -ErrorAction SilentlyContinue
+        Start-Service "SysMain" -ErrorAction SilentlyContinue
     }
     
-    # Windows Search to Manual
+    # Windows Search to Manual (Start search still works; continuous indexing stays quieter)
     $wsearchService = Get-Service "WSearch" -ErrorAction SilentlyContinue
     if ($wsearchService) {
         Set-Service "WSearch" -StartupType Manual -ErrorAction SilentlyContinue
@@ -1424,11 +1835,30 @@ if ($AutomatedMode -and [string]::IsNullOrWhiteSpace($OptimisationAction)) {
 $VisualOptimisation = {
     try {
         Write-Host "Starting Visual Optimisation..." -ForegroundColor Cyan
-        if (Test-Path $VisualOptimisationScript) {
-            & $VisualOptimisationScript --automated
-        } else {
+        if (-not (Test-Path $VisualOptimisationScript)) {
             throw "Visual optimisation script not found at $VisualOptimisationScript"
         }
+
+        $visualArgs = @()
+        $oldSchoolChoice = [System.Windows.Forms.MessageBox]::Show(
+            "Apply Old school theme (classic grey Win95/98)?`n`nThis turns off visual styles for this user and applies the classic grey colour scheme so menus, buttons, and toolbars look like old Windows — not Vista/7 glass. Start and the taskbar stay modern.`n`nYes = Classic grey + visual reduction`nNo = Visual performance tweaks only",
+            'Visual Optimisation',
+            'YesNoCancel',
+            'Question'
+        )
+
+        if ($oldSchoolChoice -eq [System.Windows.Forms.DialogResult]::Cancel) {
+            Write-Host 'Visual optimisation cancelled.' -ForegroundColor Yellow
+            return
+        }
+
+        if ($oldSchoolChoice -eq [System.Windows.Forms.DialogResult]::Yes) {
+            $visualArgs += '--old-school'
+        }
+
+        # Run automated so the script does not show a second options dialog.
+        $visualArgs = @('--automated') + $visualArgs
+        & $VisualOptimisationScript @visualArgs
         ExecutionCompleted
     } catch {
         Write-Host "Error during Visual Optimisation: $_" -ForegroundColor Red
@@ -1686,7 +2116,7 @@ $ParentRoot = Split-Path -Parent $ScriptRoot
 $IconPath = "$ParentRoot\Assets\windowslogo.ico"
 
 # Get OS version for display
-$osVersion = (Get-WmiObject -Class Win32_OperatingSystem).Caption -replace "Microsoft Windows ", ""
+$osVersion = ((Get-CimInstance -ClassName Win32_OperatingSystem).Caption) -replace "Microsoft Windows ", ""
 
 # Calculate optimal form size based on screen resolution
 $screen = [System.Windows.Forms.Screen]::PrimaryScreen
@@ -1961,7 +2391,7 @@ Add-OptimisationButton "UI & Notifications" (New-Object System.Drawing.Point($ri
 $currentY += 50
 
 Add-OptimisationButton "Privacy Hardening" (New-Object System.Drawing.Point($leftButtonX, $currentY)) $PrivacyOptimisations "Privacy" "Apply additional privacy controls for feedback, tailored experiences, and selected diagnostic data paths."
-Add-OptimisationButton "Additional Services" (New-Object System.Drawing.Point($rightButtonX, $currentY)) $AdditionalServicesOptimisations "Services" "Disable extra optional services (for example Xbox/CDP-related components) where they are not needed."
+Add-OptimisationButton "Additional Services" (New-Object System.Drawing.Point($rightButtonX, $currentY)) $AdditionalServicesOptimisations "Services" "Disable extra optional services, including detected OEM usage reports and support agents. Graphics, audio, storage, and hotkey software stays available."
 $currentY += 50
 
 Add-OptimisationSection "Advanced and Recovery" (New-Object System.Drawing.Point(20, $currentY))

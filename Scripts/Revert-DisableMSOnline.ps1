@@ -155,17 +155,31 @@ function Enable-MicrosoftAccountNags {
             try { Remove-ItemProperty -Path $sysPath -Name 'NoConnectedUser' -Force -ErrorAction SilentlyContinue } catch {}
         }
 
-        # Re-enable account integration prompts via PolicyManager (best effort)
-        $pmPaths = @(
-            'HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device\Settings',
-            'HKLM:\SOFTWARE\Microsoft\PolicyManager\default\Settings\AllowYourAccount'
-        )
-        foreach ($p in $pmPaths) {
-            if (Test-Path $p) {
-                try { Remove-ItemProperty -Path $p -Name 'AllowYourAccount' -Force -ErrorAction SilentlyContinue } catch {}
-                try { Remove-ItemProperty -Path $p -Name 'AllowSignInOptions' -Force -ErrorAction SilentlyContinue } catch {}
-                try { Remove-ItemProperty -Path $p -Name 'Value' -Force -ErrorAction SilentlyContinue } catch {}
+        # Clear any device overrides that locked Settings > Accounts > Your info / sign-in options
+        $pmDevicePath = 'HKLM:\SOFTWARE\Microsoft\PolicyManager\current\device\Settings'
+        if (Test-Path $pmDevicePath) {
+            try { Remove-ItemProperty -Path $pmDevicePath -Name 'AllowYourAccount' -Force -ErrorAction SilentlyContinue } catch {}
+            try { Remove-ItemProperty -Path $pmDevicePath -Name 'AllowSignInOptions' -Force -ErrorAction SilentlyContinue } catch {}
+        }
+
+        # PolicyManager schema defaults must stay at 1 (Allowed). Never delete Value on these keys.
+        foreach ($name in @('AllowYourAccount', 'AllowSignInOptions')) {
+            $defaultPath = "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\Settings\$name"
+            if (Test-Path $defaultPath) {
+                try { Set-ItemProperty -Path $defaultPath -Name 'Value' -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue } catch {}
             }
+        }
+
+        $explorerPolicy = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Explorer'
+        if (Test-Path $explorerPolicy) {
+            try { Remove-ItemProperty -Path $explorerPolicy -Name 'UseDefaultTile' -Force -ErrorAction SilentlyContinue } catch {}
+            try { Remove-ItemProperty -Path $explorerPolicy -Name 'NoChangingAccountPicture' -Force -ErrorAction SilentlyContinue } catch {}
+        }
+
+        # Leave LetAppsAccessAccountInfo unset so local profile pictures stay changeable.
+        $appPrivacy = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy'
+        if (Test-Path $appPrivacy) {
+            try { Remove-ItemProperty -Path $appPrivacy -Name 'LetAppsAccessAccountInfo' -Force -ErrorAction SilentlyContinue } catch {}
         }
     } 'Microsoft account policy blocks'
 

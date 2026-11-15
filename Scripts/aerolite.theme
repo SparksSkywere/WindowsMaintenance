@@ -53,7 +53,7 @@ ColorStyle=NormalColor
 Size=NormalSize
 AutoColorization=0
 ColorizationColor=0XC40078D7
-SystemMode=Dark
+SystemMode=Light
 
 [boot]
 SCRNSAVE.EXE=

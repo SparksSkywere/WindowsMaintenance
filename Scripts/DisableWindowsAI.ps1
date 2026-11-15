@@ -78,17 +78,24 @@ function Disable-WindowsAIPolicies {
         Set-MachineDword -Path $windowsAI -Name 'AllowRecallEnablement' -Value 0
         Set-MachineDword -Path $windowsAI -Name 'DisableSettingsAgent' -Value 1
         Set-MachineDword -Path $windowsAI -Name 'DisableClickToDo' -Value 1
+        # Present on Win11 24H2+; ignored on Windows 10 where Recall export does not exist.
+        Set-MachineDword -Path $windowsAI -Name 'AllowRecallExport' -Value 0
 
         Set-MachineDword -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\Explorer' -Name 'DisableSearchBoxSuggestions' -Value 1
         Set-MachineDword -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Speech' -Name 'AllowOnlineSpeechRecognition' -Value 0
         Set-MachineDword -Path 'HKLM:\SOFTWARE\Policies\Microsoft\InputPersonalization' -Name 'AllowInputPersonalization' -Value 0
+        # AppPrivacy AI model use (Win11 25H2+ ADMX). Harmless no-op reader on older builds.
+        Set-MachineDword -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\AppPrivacy' -Name 'LetAppsAccessSystemAIModels' -Value 2
 
         foreach ($hive in (Get-TargetUserHives)) {
             Set-HiveDword -Root $hive -SubPath 'SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot' -Name 'TurnOffWindowsCopilot' -Value 1
             Set-HiveDword -Root $hive -SubPath 'SOFTWARE\Policies\Microsoft\Windows\WindowsAI' -Name 'DisableAIDataAnalysis' -Value 1
             Set-HiveDword -Root $hive -SubPath 'SOFTWARE\Policies\Microsoft\Windows\WindowsAI' -Name 'AllowRecallEnablement' -Value 0
+            Set-HiveDword -Root $hive -SubPath 'SOFTWARE\Policies\Microsoft\Windows\WindowsAI' -Name 'DisableClickToDo' -Value 1
 
             Set-HiveDword -Root $hive -SubPath 'Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'ShowCopilotButton' -Value 0
+            Set-HiveDword -Root $hive -SubPath 'Software\Microsoft\Windows\Shell\Copilot' -Name 'CopilotDisabled' -Value 1
+            Set-HiveDword -Root $hive -SubPath 'Software\Microsoft\Windows\Shell\Copilot\BingChat' -Name 'IsUserEligible' -Value 0
 
             Set-HiveDword -Root $hive -SubPath 'Software\Microsoft\Windows\CurrentVersion\SearchSettings' -Name 'IsCopilotEnabled' -Value 0
             Set-HiveDword -Root $hive -SubPath 'Software\Microsoft\Windows\CurrentVersion\SearchSettings' -Name 'IsCopilotAvailable' -Value 0

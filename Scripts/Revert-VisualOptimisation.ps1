@@ -2,49 +2,97 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 # Revert for VisualOptimisation.ps1
-# Re-enables common visual effects, animations, and DWM behaviours that were disabled for performance.
+# Restores animations/effects and undoes classic-grey old-school mode (ThemeActive + system colours).
 
 $AutomatedMode = $args -contains '--automated'
+$MarkerPath = 'HKCU:\Software\WindowsMaintenance\VisualOptimisation'
 
 function Write-Status { param([string]$m) Write-Host $m }
 
+function Ensure-Key {
+    param([string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) {
+        New-Item -Path $Path -Force | Out-Null
+    }
+}
+
+function Close-SettingsIfOpened {
+    param([int]$TimeoutSeconds = 6)
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        $settings = @(Get-Process -Name 'SystemSettings' -ErrorAction SilentlyContinue)
+        if ($settings.Count -gt 0) {
+            Start-Sleep -Milliseconds 500
+            foreach ($proc in $settings) {
+                try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}
+            }
+            return
+        }
+        Start-Sleep -Milliseconds 200
+    }
+}
+
 try {
-    Write-Status 'Reverting visual optimisations (re-enabling animations and effects)...'
+    Write-Status 'Reverting visual optimisations...'
 
-    # VisualFXSetting back towards "Let Windows choose" (default is usually 0 or 1 in many profiles)
-    try {
-        Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects' -Name 'VisualFXSetting' -Value 0 -Force -EA SilentlyContinue
-    } catch {}
+    Ensure-Key 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects'
+    Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects' -Name 'VisualFXSetting' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
 
-    # MinAnimate (window minimise animation)
-    $wm = 'HKCU:\Control Panel\Desktop\WindowMetrics'
-    if (Test-Path $wm) {
-        try { Set-ItemProperty -Path $wm -Name 'MinAnimate' -Value 1 -Force -EA SilentlyContinue } catch {}
+    Ensure-Key 'HKCU:\Control Panel\Desktop\WindowMetrics'
+    Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop\WindowMetrics' -Name 'MinAnimate' -Value '1' -Force -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop\WindowMetrics' -Name 'PaddedBorderWidth' -Value '-60' -Force -ErrorAction SilentlyContinue
+
+    Ensure-Key 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+    Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'TaskbarAnimations' -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'ListviewAlphaSelect' -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'ListviewShadow' -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+
+    Ensure-Key 'HKCU:\Control Panel\Desktop'
+    Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'DragFullWindows' -Value '1' -Force -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'FontSmoothing' -Value '2' -Force -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'MenuShowDelay' -Value '400' -Force -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'UserPreferencesMask' -Value ([byte[]](0x9E, 0x3E, 0x07, 0x80, 0x12, 0x00, 0x00, 0x00)) -Force -ErrorAction SilentlyContinue
+
+    Ensure-Key 'HKCU:\Software\Microsoft\Windows\DWM'
+    Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\DWM' -Name 'EnableAeroPeek' -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\DWM' -Name 'CompositionPolicy' -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\DWM' -Name 'ColorizationOpaqueBlend' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
+
+    Ensure-Key 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize'
+    Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize' -Name 'EnableTransparency' -Value 1 -Type DWord -Force -ErrorAction SilentlyContinue
+
+    # Re-enable visual styles (undo classic grey ThemeActive=0)
+    Ensure-Key 'HKCU:\Software\Microsoft\Windows\CurrentVersion\ThemeManager'
+    Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\ThemeManager' -Name 'ThemeActive' -Value 1 -Force -ErrorAction SilentlyContinue
+    Ensure-Key 'HKLM:\Software\Microsoft\Windows\CurrentVersion\ThemeManager'
+    Set-ItemProperty -Path 'HKLM:\Software\Microsoft\Windows\CurrentVersion\ThemeManager' -Name 'ThemeActive' -Value 1 -Force -ErrorAction SilentlyContinue
+
+    $oldSchool = 0
+    if (Test-Path -LiteralPath $MarkerPath) {
+        try { $oldSchool = [int](Get-ItemProperty -LiteralPath $MarkerPath -Name 'OldSchoolTheme' -ErrorAction SilentlyContinue).OldSchoolTheme } catch { $oldSchool = 0 }
     }
 
-    # Taskbar animations
-    try {
-        Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced' -Name 'TaskbarAnimations' -Value 1 -Force -EA SilentlyContinue
-    } catch {}
-
-    # Common other visual keys that optimisers touch (best effort)
-    $adv = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
-    if (Test-Path $adv) {
-        try { Set-ItemProperty -Path $adv -Name 'ListviewAlphaSelect' -Value 1 -Force -EA SilentlyContinue } catch {}
-        try { Set-ItemProperty -Path $adv -Name 'ListviewShadow' -Value 1 -Force -EA SilentlyContinue } catch {}
+    if ($oldSchool -eq 1) {
+        Write-Status 'Restoring default Windows theme and colours (undoing classic grey)...'
+        $defaultTheme = Join-Path $env:SystemRoot 'Resources\Themes\aero.theme'
+        if (Test-Path -LiteralPath $defaultTheme) {
+            Start-Process -FilePath $defaultTheme | Out-Null
+            Close-SettingsIfOpened
+        }
+        Set-ItemProperty -Path $MarkerPath -Name 'OldSchoolTheme' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
     }
 
-    # Re-enable transparency / Mica effects where policy exists (Windows 11)
-    $dwm = 'HKCU:\Software\Microsoft\Windows\DWM'
-    if (-not (Test-Path $dwm)) { New-Item -Path $dwm -Force | Out-Null }
-    try { Set-ItemProperty -Path $dwm -Name 'EnableAeroPeek' -Value 1 -Force -EA SilentlyContinue } catch {}
-    try { Set-ItemProperty -Path $dwm -Name 'AlwaysHibernateThumbnails' -Value 1 -Force -EA SilentlyContinue } catch {}
-
-    Write-Status 'Visual effects largely re-enabled. A sign-out or explorer restart may be needed for some changes.'
+    Write-Status 'Visual effects restored. Sign out if classic grey controls are still showing.'
 
     if (-not $AutomatedMode) {
         Add-Type -AssemblyName System.Windows.Forms
-        [System.Windows.Forms.MessageBox]::Show('Visual optimisations have been reverted. Animations and effects are re-enabled.', 'Revert Visual Optimisation', 'OK', 'Information') | Out-Null
+        [System.Windows.Forms.MessageBox]::Show(
+            'Visual optimisations have been reverted. Animations, visual styles, and the default theme are restored.',
+            'Revert Visual Optimisation',
+            'OK',
+            'Information'
+        ) | Out-Null
     }
 
     exit 0

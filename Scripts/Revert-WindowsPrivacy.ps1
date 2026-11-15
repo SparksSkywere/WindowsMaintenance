@@ -128,11 +128,24 @@ function Revert-CorePrivacyPolicies {
         # Cloud content consumer features
         $cloudM = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CloudContent'
         if (Test-Path $cloudM) {
-            try { Remove-ItemProperty -Path $cloudM -Name 'DisableWindowsConsumerFeatures' -Force -EA SilentlyContinue } catch {}
+            foreach ($name in @(
+                'DisableWindowsConsumerFeatures',
+                'DisableSoftLanding',
+                'DisableCloudOptimizedContent',
+                'DisableConsumerAccountStateContent'
+            )) {
+                try { Remove-ItemProperty -Path $cloudM -Name $name -Force -EA SilentlyContinue } catch {}
+            }
         }
         $cloudU = 'HKCU:\SOFTWARE\Policies\Microsoft\Windows\CloudContent'
         if (Test-Path $cloudU) {
-            try { Remove-ItemProperty -Path $cloudU -Name 'DisableTailoredExperiencesWithDiagnosticData' -Force -EA SilentlyContinue } catch {}
+            foreach ($name in @(
+                'DisableTailoredExperiencesWithDiagnosticData',
+                'DisableWindowsSpotlightFeatures',
+                'DisableSpotlightCollectionOnDesktop'
+            )) {
+                try { Remove-ItemProperty -Path $cloudU -Name $name -Force -EA SilentlyContinue } catch {}
+            }
         }
 
         # Delivery Optimisation back to default (1 = LAN + internet group, or let Windows decide)
@@ -189,7 +202,8 @@ function Enable-PrivacyScheduledTasks {
             '\Microsoft\Windows\Customer Experience Improvement Program\KernelCeipTask',
             '\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip',
             '\Microsoft\Windows\Feedback\Siuf\DmClient',
-            '\Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload'
+            '\Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload',
+            '\Microsoft\Windows\PerformanceTrace\ShowFeedbackToast'
         )
         foreach ($taskPath in $tasks) {
             try {

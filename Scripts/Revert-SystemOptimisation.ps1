@@ -45,6 +45,17 @@ try {
     Remove-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\Power\PowerThrottling' -Name 'PowerThrottlingOff' -ErrorAction SilentlyContinue
     Set-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile' -Name 'SystemResponsiveness' -Value 20 -Type DWord -Force -ErrorAction SilentlyContinue
     Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'MenuShowDelay' -Value '400' -Type String -Force -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'WaitToKillAppTimeout' -Value '5000' -Type String -Force -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKCU:\Control Panel\Desktop' -Name 'HungAppTimeout' -Value '5000' -Type String -Force -ErrorAction SilentlyContinue
+    Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Control' -Name 'WaitToKillServiceTimeout' -Value '5000' -Type String -Force -ErrorAction SilentlyContinue
+    Remove-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System' -Name 'DisableAutomaticRestartSignOn' -Force -ErrorAction SilentlyContinue
+    $fsPath = 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem'
+    if (Test-Path $fsPath) {
+        Remove-ItemProperty -Path $fsPath -Name 'NtfsMemoryUsage' -Force -ErrorAction SilentlyContinue
+    }
+    try { netsh interface teredo set state default 2>$null | Out-Null } catch {}
+    try { netsh interface 6to4 set state default 2>$null | Out-Null } catch {}
+    try { netsh interface isatap set state default 2>$null | Out-Null } catch {}
     foreach ($edgePolicy in @('HKLM:\SOFTWARE\Policies\Microsoft\Edge', 'HKCU:\SOFTWARE\Policies\Microsoft\Edge')) {
         if (Test-Path $edgePolicy) {
             foreach ($edgeName in @('StartupBoostEnabled', 'BackgroundModeEnabled', 'SleepingTabsEnabled')) {
@@ -115,6 +126,47 @@ try {
         Set-ItemProperty -Path $feedsUser -Name 'ShellFeedsTaskbarViewMode' -Value 0 -Type DWord -Force -ErrorAction SilentlyContinue
     }
 
+    $oemStore = 'HKLM:\SOFTWARE\WindowsMaintenance'
+    $oemServiceStore = Join-Path $oemStore 'OemServiceStartup'
+    if (Test-Path -LiteralPath $oemServiceStore) {
+        $oemServiceKey = Get-Item -LiteralPath $oemServiceStore -ErrorAction SilentlyContinue
+        if ($oemServiceKey) {
+            foreach ($oemServiceName in @($oemServiceKey.Property)) {
+                if ([string]::IsNullOrWhiteSpace($oemServiceName)) { continue }
+                $oemMode = [string]$oemServiceKey.GetValue($oemServiceName)
+                if ($oemMode -ne 'Automatic' -and $oemMode -ne 'Manual' -and $oemMode -ne 'Disabled') { continue }
+                try { Set-Service -Name $oemServiceName -StartupType $oemMode -ErrorAction SilentlyContinue } catch {}
+                if ($oemMode -eq 'Automatic') {
+                    try { Start-Service -Name $oemServiceName -ErrorAction SilentlyContinue } catch {}
+                }
+                Remove-ItemProperty -LiteralPath $oemServiceStore -Name $oemServiceName -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+    if (Test-Path -LiteralPath $oemStore) {
+        $oemStoreKey = Get-Item -LiteralPath $oemStore -ErrorAction SilentlyContinue
+        if ($oemStoreKey) {
+            foreach ($oemTaskName in @($oemStoreKey.GetValue('OemScheduledTasks'))) {
+                if ([string]::IsNullOrWhiteSpace($oemTaskName)) { continue }
+                & schtasks.exe /Change /TN $oemTaskName /Enable 2>$null | Out-Null
+            }
+            Remove-ItemProperty -LiteralPath $oemStore -Name 'OemScheduledTasks' -Force -ErrorAction SilentlyContinue
+        }
+    }
+    $oemRunStore = Join-Path $oemStore 'OemRun'
+    if (Test-Path -LiteralPath $oemRunStore) {
+        foreach ($oemRunEntry in @(Get-ChildItem -LiteralPath $oemRunStore -ErrorAction SilentlyContinue)) {
+            if (-not $oemRunEntry) { continue }
+            $oemHive = [string]$oemRunEntry.GetValue('HivePath')
+            $oemValueName = [string]$oemRunEntry.GetValue('ValueName')
+            $oemValueData = [string]$oemRunEntry.GetValue('ValueData')
+            if (-not [string]::IsNullOrWhiteSpace($oemHive) -and -not [string]::IsNullOrWhiteSpace($oemValueName) -and (Test-Path -LiteralPath $oemHive)) {
+                New-ItemProperty -LiteralPath $oemHive -Name $oemValueName -Value $oemValueData -PropertyType String -Force -ErrorAction SilentlyContinue | Out-Null
+            }
+            Remove-Item -LiteralPath $oemRunEntry.PSPath -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
     # DiagTrack stays Manual so this revert does not turn telemetry back on ahead of the privacy task.
     $serviceDefaults = @{
         'SysMain' = 'Automatic'
@@ -158,6 +210,22 @@ try {
         'SEMgrSvc' = 'Manual'
         'wisvc' = 'Manual'
         'DusmSvc' = 'Manual'
+        'SSDPSRV' = 'Manual'
+        'upnphost' = 'Manual'
+        'CscService' = 'Manual'
+        'RpcLocator' = 'Manual'
+        'NetTcpPortSharing' = 'Disabled'
+        'diagnosticshub.standardcollector.service' = 'Manual'
+        'diagsvc' = 'Manual'
+        'WdiServiceHost' = 'Manual'
+        'MSDTC' = 'Manual'
+        'MixedRealityOpenXRSvc' = 'Manual'
+        'perceptionsimulation' = 'Manual'
+        'spectrum' = 'Manual'
+        'VacSvc' = 'Manual'
+        'WalletService' = 'Manual'
+        'AssignedAccessManagerSvc' = 'Manual'
+        'shpamsvc' = 'Manual'
     }
     foreach ($svcName in @($serviceDefaults.Keys)) {
         $service = Get-Service -Name $svcName -ErrorAction SilentlyContinue
@@ -171,6 +239,8 @@ try {
         'WpnUserService*' = 'Automatic'
         'CDPUserSvc*' = 'Automatic'
         'BcastDVRUserService*' = 'Manual'
+        'MessagingService*' = 'Manual'
+        'PimIndexMaintenanceSvc*' = 'Manual'
     }
     foreach ($pattern in @($servicePatterns.Keys)) {
         $matched = @(Get-Service -Name $pattern -ErrorAction SilentlyContinue)
@@ -185,6 +255,7 @@ try {
         '\Microsoft\Windows\Application Experience\ProgramDataUpdater',
         '\Microsoft\Windows\Application Experience\MareBackup',
         '\Microsoft\Windows\Application Experience\StartupAppTask',
+        '\Microsoft\Windows\Application Experience\PcaPatchDbTask',
         '\Microsoft\Windows\Customer Experience Improvement Program\Consolidator',
         '\Microsoft\Windows\Customer Experience Improvement Program\KernelCeipTask',
         '\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip',
@@ -194,6 +265,9 @@ try {
         '\Microsoft\Windows\Maintenance\WinSAT',
         '\Microsoft\Windows\Feedback\Siuf\DmClient',
         '\Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload',
+        '\Microsoft\Windows\PerformanceTrace\ShowFeedbackToast',
+        '\Microsoft\Windows\input\RemoteTouchpadSyncDataAvailable',
+        '\Microsoft\Windows\input\TouchpadSyncDataAvailable',
         '\Microsoft\Windows\Windows Error Reporting\QueueReporting',
         '\Microsoft\Windows\Power Efficiency Diagnostics\AnalyzeSystem',
         '\Microsoft\Windows\CloudExperienceHost\CreateObjectTask',
@@ -203,7 +277,21 @@ try {
         '\Microsoft\Windows\Clip\License Validation',
         '\Microsoft\Windows\Shell\FamilySafetyMonitor',
         '\Microsoft\Windows\Shell\FamilySafetyRefreshTask',
-        '\Microsoft\Windows\ApplicationData\DsSvcCleanup'
+        '\Microsoft\Windows\ApplicationData\DsSvcCleanup',
+        '\Microsoft\Windows\Diagnosis\Scheduled',
+        '\Microsoft\Windows\Flighting\FeatureConfig\ReconcileFeatures',
+        '\Microsoft\Windows\Flighting\FeatureConfig\UsageDataFlushing',
+        '\Microsoft\Windows\Flighting\FeatureConfig\UsageDataReporting',
+        '\Microsoft\Windows\InstallService\ScanForUpdates',
+        '\Microsoft\Windows\InstallService\ScanForUpdatesAsUser',
+        '\Microsoft\Windows\InstallService\SmartRetry',
+        '\Microsoft\Windows\InstallService\WakeUpAndContinueUpdates',
+        '\Microsoft\Windows\InstallService\WakeUpAndScanForUpdates',
+        '\Microsoft\Windows\Maps\MapsToastTask',
+        '\Microsoft\Windows\Maps\MapsUpdateTask',
+        '\Microsoft\Windows\Mobile Broadband Accounts\MNO Metadata Parser',
+        '\Microsoft\Windows\PI\Sqm-Tasks',
+        '\Microsoft\Windows\NetTrace\GatherNetworkInfo'
     )
     foreach ($scheduledTask in $scheduledTasks) {
         schtasks /Change /TN $scheduledTask /Enable 2>$null | Out-Null
